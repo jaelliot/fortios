@@ -2,21 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-PAYLOAD_DIR="${REPO_ROOT}/projects/ios-pyodide-payload"
+# Flat layout: TS payload sources live at the repo root (SCRIPT_DIR).
+PAYLOAD_DIR="${SCRIPT_DIR}"
 PAYLOAD_DIST_DIR="${PAYLOAD_DIR}/dist"
 MANIFEST_PATH="${PAYLOAD_DIST_DIR}/build-manifest.json"
 
 WRAPPER_PAYLOAD_DIR="${SCRIPT_DIR}/WebPayload"
 
-if [[ ! -d "${PAYLOAD_DIR}" ]]; then
-  echo "error: payload project missing at ${PAYLOAD_DIR}" 1>&2
-  exit 1
-fi
-
 if [[ ! -f "${PAYLOAD_DIR}/package-lock.json" ]]; then
-  echo "error: payload missing package-lock.json (required for deterministic builds)" 1>&2
+  echo "error: package-lock.json missing in ${PAYLOAD_DIR} (required for deterministic builds)" 1>&2
   exit 1
 fi
 
@@ -61,7 +56,7 @@ echo "[sync-payload] building web payload"
 PYODIDE_SRC_DIR="${PAYLOAD_DIR}/public/pyodide"
 if [[ ! -f "${PYODIDE_SRC_DIR}/pyodide.js" ]]; then
   echo "error: Pyodide runtime not found at ${PYODIDE_SRC_DIR}" 1>&2
-  echo "       Run: cd projects/ios-wrapper && make pyodide" 1>&2
+  echo "       Run: cd libs/Fort-ios && make pyodide" 1>&2
   exit 1
 fi
 echo "[sync-payload] bundling pyodide assets → dist/pyodide/"
@@ -125,6 +120,7 @@ print(
 PY
 
 echo "[sync-payload] syncing into wrapper WebPayload/"
+mkdir -p "${WRAPPER_PAYLOAD_DIR}"
 rm -rf "${WRAPPER_PAYLOAD_DIR}"/*
 cp -R "${PAYLOAD_DIST_DIR}"/. "${WRAPPER_PAYLOAD_DIR}/"
 

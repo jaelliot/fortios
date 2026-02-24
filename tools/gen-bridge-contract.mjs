@@ -18,7 +18,7 @@ const ROOT = resolve(__dirname, '..');
 
 const contractPath = resolve(ROOT, 'bridge-contract.json');
 const tsOutPath = resolve(ROOT, 'src', 'bridge-contract.ts');
-const swiftOutPath = resolve(ROOT, '..', '..', 'projects', 'ios-wrapper', 'xcodeproj', 'KeriWallet', 'KeriWallet', 'BridgeContract.swift');
+const swiftOutPath = resolve(ROOT, 'xcodeproj', 'KeriWallet', 'KeriWallet', 'BridgeContract.swift');
 
 const contract = JSON.parse(readFileSync(contractPath, 'utf-8'));
 

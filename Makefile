@@ -13,10 +13,10 @@ help: ## Show available make targets
 		awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
 setup: ## Install Node dependencies for the web payload (run once after clone)
-	cd ../ios-pyodide-payload && npm ci
+	npm ci
 
 pyodide: ## Download Pyodide v0.29.1 runtime + crypto wheels (run once per machine)
-	bash ../ios-pyodide-payload/scripts/download-pyodide.sh
+	bash scripts/download-pyodide.sh
 
 sync: ## Build web payload and sync dist/ → WebPayload/
 	./sync-payload.sh
