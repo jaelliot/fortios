@@ -1,0 +1,3 @@
+// Release-specific settings
+
+SWIFT_OPTIMIZATION_LEVEL = -O

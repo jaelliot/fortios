@@ -1,0 +1,1 @@
+../xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift

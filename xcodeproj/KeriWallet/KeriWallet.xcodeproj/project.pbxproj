@@ -1,0 +1,601 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AAFACADE00000002CAFEBABE /* WebPayload in Resources */ = {isa = PBXBuildFile; fileRef = AAFACADE00000001CAFEBABE /* WebPayload */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E0F91FA72F48E06C000C52E9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0F91F882F48E06A000C52E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E0F91F8F2F48E06A000C52E9;
+			remoteInfo = KeriWallet;
+		};
+		E0F91FB12F48E06C000C52E9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0F91F882F48E06A000C52E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E0F91F8F2F48E06A000C52E9;
+			remoteInfo = KeriWallet;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AAFACADE00000001CAFEBABE /* WebPayload */ = {isa = PBXFileReference; lastKnownFileType = folder; name = WebPayload; path = ../../WebPayload; sourceTree = "<group>"; };
+		E0F91F902F48E06A000C52E9 /* KeriWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KeriWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0F91FA62F48E06C000C52E9 /* KeriWalletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeriWalletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0F91FB02F48E06C000C52E9 /* KeriWalletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeriWalletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E0F91FB82F48E06C000C52E9 /* Exceptions for "KeriWallet" folder in "KeriWallet" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E0F91F8F2F48E06A000C52E9 /* KeriWallet */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		E0F91F922F48E06A000C52E9 /* KeriWallet */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E0F91FB82F48E06C000C52E9 /* Exceptions for "KeriWallet" folder in "KeriWallet" target */,
+			);
+			path = KeriWallet;
+			sourceTree = "<group>";
+		};
+		E0F91FA92F48E06C000C52E9 /* KeriWalletTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KeriWalletTests;
+			sourceTree = "<group>";
+		};
+		E0F91FB32F48E06C000C52E9 /* KeriWalletUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KeriWalletUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E0F91F8D2F48E06A000C52E9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FA32F48E06C000C52E9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FAD2F48E06C000C52E9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E0F91F872F48E06A000C52E9 = {
+			isa = PBXGroup;
+			children = (
+				E0F91F922F48E06A000C52E9 /* KeriWallet */,
+				AAFACADE00000001CAFEBABE /* WebPayload */,
+				E0F91FA92F48E06C000C52E9 /* KeriWalletTests */,
+				E0F91FB32F48E06C000C52E9 /* KeriWalletUITests */,
+				E0F91F912F48E06A000C52E9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E0F91F912F48E06A000C52E9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E0F91F902F48E06A000C52E9 /* KeriWallet.app */,
+				E0F91FA62F48E06C000C52E9 /* KeriWalletTests.xctest */,
+				E0F91FB02F48E06C000C52E9 /* KeriWalletUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E0F91F8F2F48E06A000C52E9 /* KeriWallet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0F91FB92F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWallet" */;
+			buildPhases = (
+				E0F91F8C2F48E06A000C52E9 /* Sources */,
+				E0F91F8D2F48E06A000C52E9 /* Frameworks */,
+				E0F91F8E2F48E06A000C52E9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E0F91F922F48E06A000C52E9 /* KeriWallet */,
+			);
+			name = KeriWallet;
+			packageProductDependencies = (
+			);
+			productName = KeriWallet;
+			productReference = E0F91F902F48E06A000C52E9 /* KeriWallet.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E0F91FA52F48E06C000C52E9 /* KeriWalletTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0F91FBE2F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWalletTests" */;
+			buildPhases = (
+				E0F91FA22F48E06C000C52E9 /* Sources */,
+				E0F91FA32F48E06C000C52E9 /* Frameworks */,
+				E0F91FA42F48E06C000C52E9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E0F91FA82F48E06C000C52E9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E0F91FA92F48E06C000C52E9 /* KeriWalletTests */,
+			);
+			name = KeriWalletTests;
+			packageProductDependencies = (
+			);
+			productName = KeriWalletTests;
+			productReference = E0F91FA62F48E06C000C52E9 /* KeriWalletTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E0F91FAF2F48E06C000C52E9 /* KeriWalletUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0F91FC12F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWalletUITests" */;
+			buildPhases = (
+				E0F91FAC2F48E06C000C52E9 /* Sources */,
+				E0F91FAD2F48E06C000C52E9 /* Frameworks */,
+				E0F91FAE2F48E06C000C52E9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E0F91FB22F48E06C000C52E9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E0F91FB32F48E06C000C52E9 /* KeriWalletUITests */,
+			);
+			name = KeriWalletUITests;
+			packageProductDependencies = (
+			);
+			productName = KeriWalletUITests;
+			productReference = E0F91FB02F48E06C000C52E9 /* KeriWalletUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E0F91F882F48E06A000C52E9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					E0F91F8F2F48E06A000C52E9 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					E0F91FA52F48E06C000C52E9 = {
+						CreatedOnToolsVersion = 26.0.1;
+						TestTargetID = E0F91F8F2F48E06A000C52E9;
+					};
+					E0F91FAF2F48E06C000C52E9 = {
+						CreatedOnToolsVersion = 26.0.1;
+						TestTargetID = E0F91F8F2F48E06A000C52E9;
+					};
+				};
+			};
+			buildConfigurationList = E0F91F8B2F48E06A000C52E9 /* Build configuration list for PBXProject "KeriWallet" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E0F91F872F48E06A000C52E9;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E0F91F912F48E06A000C52E9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E0F91F8F2F48E06A000C52E9 /* KeriWallet */,
+				E0F91FA52F48E06C000C52E9 /* KeriWalletTests */,
+				E0F91FAF2F48E06C000C52E9 /* KeriWalletUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E0F91F8E2F48E06A000C52E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAFACADE00000002CAFEBABE /* WebPayload in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FA42F48E06C000C52E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FAE2F48E06C000C52E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E0F91F8C2F48E06A000C52E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FA22F48E06C000C52E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0F91FAC2F48E06C000C52E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E0F91FA82F48E06C000C52E9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E0F91F8F2F48E06A000C52E9 /* KeriWallet */;
+			targetProxy = E0F91FA72F48E06C000C52E9 /* PBXContainerItemProxy */;
+		};
+		E0F91FB22F48E06C000C52E9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E0F91F8F2F48E06A000C52E9 /* KeriWallet */;
+			targetProxy = E0F91FB12F48E06C000C52E9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E0F91FBA2F48E06C000C52E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeriWallet/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E0F91FBB2F48E06C000C52E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeriWallet/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E0F91FBC2F48E06C000C52E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E0F91FBD2F48E06C000C52E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 859JH634FB;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E0F91FBF2F48E06C000C52E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KeriWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/KeriWallet";
+			};
+			name = Debug;
+		};
+		E0F91FC02F48E06C000C52E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KeriWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/KeriWallet";
+			};
+			name = Release;
+		};
+		E0F91FC22F48E06C000C52E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KeriWallet;
+			};
+			name = Debug;
+		};
+		E0F91FC32F48E06C000C52E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 859JH634FB;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerifoundation.wallet.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KeriWallet;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E0F91F8B2F48E06A000C52E9 /* Build configuration list for PBXProject "KeriWallet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0F91FBC2F48E06C000C52E9 /* Debug */,
+				E0F91FBD2F48E06C000C52E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E0F91FB92F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWallet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0F91FBA2F48E06C000C52E9 /* Debug */,
+				E0F91FBB2F48E06C000C52E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E0F91FBE2F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWalletTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0F91FBF2F48E06C000C52E9 /* Debug */,
+				E0F91FC02F48E06C000C52E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E0F91FC12F48E06C000C52E9 /* Build configuration list for PBXNativeTarget "KeriWalletUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0F91FC22F48E06C000C52E9 /* Debug */,
+				E0F91FC32F48E06C000C52E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E0F91F882F48E06A000C52E9 /* Project object */;
+}

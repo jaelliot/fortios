@@ -1,0 +1,73 @@
+# ── SwiftLint Configuration ─────────────────────────────────────────────────
+# Rationale: ADR-028 — iOS SwiftLint & Type-Inference Strategy
+# Installed via: brew install swiftlint (v0.63.2+)
+# Run:          make lint   (from projects/ios-wrapper/)
+# VS Code:      vknabel.vscode-swiftlint extension runs on save
+# ────────────────────────────────────────────────────────────────────────────
+
+# Only lint our own Swift source — not DerivedData, build artifacts, etc.
+included:
+  - xcodeproj/KeriWallet/KeriWallet
+  - xcodeproj/KeriWallet/KeriWalletTests
+  - xcodeproj/KeriWallet/KeriWalletUITests
+
+# Exclude auto-generated files (codegen output would trigger false positives)
+excluded:
+  - xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift
+
+# ── Opt-in Rules ────────────────────────────────────────────────────────────
+# These are OFF by default in SwiftLint; we explicitly enable them.
+opt_in_rules:
+  - force_unwrapping # Catches `!` force unwraps — aligns with ios-swift-coding zero-tolerance
+  - redundant_type_annotation # Warns on over-specified types where inference suffices
+
+# ── Rule Configuration ─────────────────────────────────────────────────────
+
+# redundant_type_annotation: flag `let x: Int = 0` since Int is the default
+# literal type. Keeps code idiomatic per Swift API Design Guidelines.
+redundant_type_annotation:
+  consider_default_literal_types_redundant: true
+
+# line_length: 120 columns (matches Google Swift Style Guide recommendation;
+# wider than the 100-char Python ruler to accommodate Swift's verbose syntax)
+line_length:
+  warning: 120
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+# type_body_length: generous limits for UIKit view controllers
+type_body_length:
+  warning: 300
+  error: 500
+
+# file_length: generous — some Swift files are legitimately large
+file_length:
+  warning: 500
+  error: 1000
+
+# function_body_length: keep functions focused
+function_body_length:
+  warning: 50
+  error: 100
+
+# identifier_name: allow short names common in Swift (x, y, id, vc, etc.)
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - vc
+    - x
+    - y
+    - i
+    - n
+
+# large_tuple: allow 3-member tuples (e.g., (Data, String, [String: String]))
+large_tuple:
+  warning: 3
+  error: 4

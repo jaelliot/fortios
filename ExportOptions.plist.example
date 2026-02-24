@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ExportOptions.plist.example
+  Copy to ExportOptions.plist, fill in YOUR values, then run:
+
+    xcodebuild archive \
+      -project xcodeproj/KeriWallet/KeriWallet.xcodeproj \
+      -scheme KeriWallet \
+      -configuration Release \
+      -destination 'generic/platform=iOS' \
+      -archivePath build/KeriWallet.xcarchive
+
+    xcodebuild -exportArchive \
+      -archivePath build/KeriWallet.xcarchive \
+      -exportPath build/export \
+      -exportOptionsPlist ExportOptions.plist
+
+  ExportOptions.plist is NOT committed (contains your Team ID).
+  This .example file is the committed template.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Your 10-character Apple Team ID (found in developer.apple.com → Membership) -->
+    <key>teamID</key>
+    <string>YOUR_TEAM_ID</string>
+
+    <!-- Distribution method: app-store | ad-hoc | development | enterprise -->
+    <key>method</key>
+    <string>app-store</string>
+
+    <key>destination</key>
+    <string>export</string>
+
+    <!-- automatic: Xcode manages signing profiles -->
+    <!-- manual: uncomment and fill in provisioningProfiles below -->
+    <key>signingStyle</key>
+    <string>automatic</string>
+
+    <!--
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.kerifoundation.wallet</key>
+        <string>YOUR_PROVISIONING_PROFILE_NAME</string>
+    </dict>
+    -->
+
+    <key>uploadSymbols</key>
+    <true/>
+</dict>
+</plist>

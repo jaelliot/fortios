@@ -1,0 +1,28 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$comment": "Single source of truth for JS ↔ Swift bridge constants. Run `node tools/gen-bridge-contract.mjs` to regenerate BridgeContract.swift and src/bridge-contract.ts.",
+    "bridge": {
+        "handlerName": "bridge"
+    },
+    "bridgeMessageTypes": [
+        "js_error",
+        "unhandled_rejection",
+        "log",
+        "lifecycle",
+        "crypto_result"
+    ],
+    "workerCommandTypes": [
+        "init",
+        "blake3_hash",
+        "sign",
+        "verify"
+    ],
+    "workerResultTypes": [
+        "ready",
+        "blake3_result",
+        "sign_result",
+        "verify_result",
+        "error",
+        "log"
+    ]
+}

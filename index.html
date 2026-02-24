@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>KERI Wallet</title>
+  <style>
+    /* ─── Brand tokens (ADR-027) ────────────────────────────────────── */
+    :root {
+      /* Brand palette */
+      --keri-green: #61783e;
+      --keri-gold: #986c32;
+      --keri-black: #000000;
+
+      /* Backgrounds */
+      --bg-dark: #0d0d0f;
+      --bg-light: #f5f5f7;
+
+      /* Text */
+      --text-dark: #e8e8e8;
+      --text-light: #1d1d1f;
+      --text-muted-dark: #a0a0a8;
+      --text-muted-light: #6e6e73;
+
+      /* Status indicators */
+      --status-pending: #ff9f0a;
+      --status-error: #ff453a;
+      --status-done: var(--keri-green);
+
+      /* Spacing scale */
+      --space-xs: 8px;
+      --space-sm: 12px;
+      --space-md: 16px;
+      --space-lg: 20px;
+      --space-xl: 24px;
+
+      /* Timing — LOADING_FADE_MS in constants.ts must match --fade-duration */
+      --fade-duration: 0.4s;
+    }
+
+    /* ─── Reset ─────────────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      color-scheme: dark light;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      height: 100dvh;
+    }
+
+    /* ─── Background — literal hex, not a var() — prevents single-frame white flash ── */
+    body {
+      background-color: #0d0d0f;
+      color: var(--text-dark);
+      min-height: 100dvh;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-size: var(--space-md);
+      line-height: 1.5;
+      padding-top: max(var(--space-md), env(safe-area-inset-top));
+      padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+      padding-left: max(var(--space-md), env(safe-area-inset-left));
+      padding-right: max(var(--space-md), env(safe-area-inset-right));
+    }
+
+    @media (prefers-color-scheme: light) {
+      body {
+        background-color: var(--bg-light);
+        color: var(--text-light);
+      }
+    }
+
+    /* ─── Tap behaviour ─────────────────────────────────────────────── */
+    a,
+    button,
+    [role="button"] {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    /* ─── Loading screen (visible during Pyodide boot) ──────────────── */
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80dvh;
+      gap: var(--space-xl);
+      transition: opacity var(--fade-duration) ease-out;
+    }
+
+    #loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #loading img {
+      width: 80px;
+      height: 80px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    #loading-status {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted-dark);
+      letter-spacing: 0.5px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      #loading-status {
+        color: var(--text-muted-light);
+      }
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.6;
+        transform: scale(0.96);
+      }
+    }
+
+    /* ─── Main app (hidden until Pyodide ready) ─────────────────────── */
+    #app {
+      display: none;
+    }
+
+    #app.visible {
+      display: block;
+    }
+
+    /* ─── Header ─────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+      padding-bottom: var(--space-md);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .header {
+        border-bottom-color: rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    .header img {
+      height: 32px;
+      width: auto;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+      color: var(--keri-green);
+    }
+
+    /* ─── Status badge ───────────────────────────────────────────────── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      margin-bottom: var(--space-sm);
+    }
+
+    .status-dot {
+      width: var(--space-xs);
+      height: var(--space-xs);
+      border-radius: 50%;
+      background-color: var(--status-pending);
+      flex-shrink: 0;
+    }
+
+    .status-dot.done {
+      background-color: var(--status-done);
+    }
+
+    .status-dot.error {
+      background-color: var(--status-error);
+    }
+
+    #status {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted-dark);
+    }
+
+    @media (prefers-color-scheme: light) {
+      #status {
+        color: var(--text-muted-light);
+      }
+    }
+
+    /* ─── Output pane ────────────────────────────────────────────────── */
+    #output {
+      margin-top: var(--space-sm);
+      padding: var(--space-sm);
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      max-height: 55vh;
+      -webkit-overflow-scrolling: touch;
+      contain: layout paint;
+    }
+
+    @media (prefers-color-scheme: light) {
+      #output {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-color: rgba(0, 0, 0, 0.06);
+      }
+    }
+  </style>
+  <script type="module" src="/src/main.ts"></script>
+</head>
+
+<body>
+  <!-- Loading screen: SymbolLogo with pulse animation -->
+  <div id="loading">
+    <img src="./SymbolLogo.svg" alt="KERI" />
+    <span id="loading-status">Initializing…</span>
+  </div>
+
+  <!-- Main app: revealed after Pyodide boots -->
+  <div id="app">
+    <div class="header">
+      <img src="./FullLogo.svg" alt="KERI Foundation" />
+    </div>
+    <div class="status-row">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status">booting</span>
+    </div>
+    <pre id="output"></pre>
+  </div>
+</body>
+
+</html>

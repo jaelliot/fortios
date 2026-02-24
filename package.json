@@ -1,0 +1,20 @@
+{
+  "name": "keriwasm-web-payload",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "prebuild": "node tools/gen-bridge-contract.mjs",
+    "build": "vite build",
+    "build:ci": "node tools/gen-bridge-contract.mjs && vite build && node tools/gen-build-manifest.mjs",
+    "bridge:check": "node tools/gen-bridge-contract.mjs --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": "22.12.0"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "vite": "6.1.0"
+  }
+}

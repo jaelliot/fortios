@@ -1,0 +1,5 @@
+// Debug-specific settings
+// Always include $(inherited) when augmenting flags.
+
+OTHER_SWIFT_FLAGS = $(inherited) -DDEBUG
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEBUG
