@@ -1,2 +1,2 @@
-# Fortress
-Wasm Wallet
+# Fort
+Wasm Native Python Pyodide Web Wallet
