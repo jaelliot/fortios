@@ -10,10 +10,26 @@ enum PayloadSchemeError: Error {
 
 final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
     private let maxBytes: Int
+    /// Overrides the default Bundle.main-derived payload directory. Inject a
+    /// temporary directory URL in unit tests to avoid requiring a real app bundle.
+    private let payloadDirectory: URL?
+    private let fileManager: FileManager
 
-    init(maxBytes: Int = AppConfig.Payload.maxResourceBytes) {
+    init(
+        maxBytes: Int = AppConfig.Payload.maxResourceBytes,
+        payloadDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) {
         self.maxBytes = maxBytes
+        self.payloadDirectory = payloadDirectory
+        self.fileManager = fileManager
         super.init()
+    }
+
+    private var resolvedBaseURL: URL? {
+        if let dir = payloadDirectory { return dir }
+        return Bundle.main.resourceURL?.appendingPathComponent(
+            AppConfig.Payload.bundleSubdirectory, isDirectory: true)
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -57,27 +73,27 @@ final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
         // No async work to cancel.
     }
 
-    private func loadResource(for url: URL) throws -> (Data, String, [String: String]) {
+    /// Exposed as `internal` (not `private`) so `@testable import KeriWallet`
+    /// can exercise the full request-handling logic without requiring a live
+    /// `WKURLSchemeTask`. Production callers use the `WKURLSchemeHandler` protocol.
+    func loadResource(for url: URL) throws -> (Data, String, [String: String]) {
         guard url.scheme?.lowercased() == AppConfig.Scheme.name else {
             throw PayloadSchemeError.invalidURL
         }
 
         let relPath = try normalizedRelativePath(urlPath: url.path)
 
-        guard
-            let baseURL = Bundle.main.resourceURL?.appendingPathComponent(
-                AppConfig.Payload.bundleSubdirectory, isDirectory: true)
-        else {
+        guard let baseURL = resolvedBaseURL else {
             throw PayloadSchemeError.missingResource
         }
 
         let fileURL = baseURL.appendingPathComponent(relPath, isDirectory: false)
 
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
             throw PayloadSchemeError.missingResource
         }
 
-        let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let attrs = try fileManager.attributesOfItem(atPath: fileURL.path)
         let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
         if size > maxBytes {
             throw PayloadSchemeError.resourceTooLarge

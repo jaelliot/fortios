@@ -8,13 +8,18 @@
     "build": "vite build",
     "build:ci": "node tools/gen-bridge-contract.mjs && vite build && node tools/gen-build-manifest.mjs",
     "bridge:check": "node tools/gen-bridge-contract.mjs --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": "22.12.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "typescript": "5.7.3",
-    "vite": "6.1.0"
+    "vite": "6.1.0",
+    "vitest": "^4.0.18"
   }
 }

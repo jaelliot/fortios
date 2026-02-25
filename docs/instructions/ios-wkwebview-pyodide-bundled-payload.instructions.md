@@ -150,6 +150,44 @@ async function installWheel(url: string): Promise<void> {
 
 ---
 
+## Worker architecture: boot vs. dispatch (ADR-030)
+
+`pyodide_worker.ts` is split into two responsibilities:
+
+| File | Responsibility |
+|------|---------------|
+| `pyodide_worker.ts` | WASM bootstrap: `importScripts`, `loadPyodide`, wheel install, session keypair gen; `self.onmessage` lifecycle |
+| `worker_router.ts` | Pure message dispatch: `handleBlake3Hash`, `handleSign`, `handleVerify`, `routeMessage` |
+
+**Why the split?**
+
+`self.importScripts()` is browser-only and unmockable in Node.js. By keeping the WASM bootstrap in `pyodide_worker.ts` and extracting pure handlers to `worker_router.ts`, the routing logic is unit-testable with a simple `vi.fn()` mock:
+
+```typescript
+// Test — no importScripts, no loadPyodide:
+import { routeMessage } from '../worker_router';
+import type { PyodideInterface } from '../types';
+
+const mockPyodide: PyodideInterface = {
+    runPythonAsync: vi.fn(() => Promise.resolve('cafebabe')),
+    loadPackage: vi.fn(),
+    pyimport: vi.fn(),
+    unpackArchive: vi.fn(),
+};
+const result = await routeMessage(
+    { id: 'r1', type: 'blake3_hash', data: 'hello' },
+    mockPyodide,
+    true,
+);
+// result.type === 'blake3_result'
+```
+
+**The `init` command** triggers WASM bootstrap and is intentionally NOT in `worker_router.ts`. It is handled directly in `pyodide_worker.ts` `self.onmessage`.
+
+**Injection boundary:** `PyodideInterface` from `src/types.ts` is the testable boundary. Do not call `pyodide!.runPythonAsync()` outside of `worker_router.ts` handlers.
+
+
+
 ## Payload sync workflow (`sync-payload.sh`)
 
 The canonical mechanism for getting the web payload into the iOS wrapper:

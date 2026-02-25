@@ -635,3 +635,98 @@ Before merging any Swift PR:
 - [ ] All closures that capture `self` use `[weak self]`; any `WKScriptMessageHandler` with a back-reference to the owning ViewController declares it `weak`
 - [ ] No `// TODO` or `// FIXME` plain-text comments — pending stubs use `#warning("TODO: ...")` so Xcode surfaces them on every build
 - [ ] `make lint` passes with zero warnings (`--strict` mode)
+
+---
+
+## Testing (ADR-030)
+
+### Framework choice
+
+| Scenario | Framework | Rule |
+|----------|-----------|------|
+| New unit tests | `import Testing` (swift-testing) | Default for all new test files |
+| Extending existing XCTest files | `import XCTest` | Match the file's framework; do not mix within a file |
+| UI / Simulator tests | `XCUITest` | Still XCTest-based |
+
+Swift-testing is available in Xcode 15+ (Swift 5.9 language mode). Test targets run `SWIFT_VERSION = 5.9`; the app target stays at its current version.
+
+### swift-testing patterns
+
+```swift
+import Testing
+
+@testable import KeriWallet
+
+@Suite("MyFeature")
+struct MyFeatureTests {
+
+    // Happy path
+    @Test("returns expected value")
+    func returnsExpectedValue() {
+        #expect(MyFeature.compute(1) == 2)
+    }
+
+    // Error path — preferred over XCTAssertThrowsError
+    @Test("throws on invalid input")
+    func throwsOnInvalidInput() {
+        #expect(throws: MyError.invalid) {
+            try MyFeature.validate("")
+        }
+    }
+
+    // Required unwrap — fails the test immediately if nil (no continue on next line)
+    @Test("unwraps optional safely")
+    func unwrapsOptional() throws {
+        let value = try #require(optionalValue)
+        #expect(value > 0)
+    }
+}
+```
+
+### DI pattern for testable Swift
+
+Never use `Bundle.main`, `FileManager.default`, `URLSession.shared`, or `Date()` directly in business logic. Inject them as parameters with production defaults:
+
+```swift
+// Production: init() — uses defaults
+// Tests: init(payloadDirectory: tmpURL) — bypasses Bundle
+final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let payloadDirectory: URL?
+    private let fileManager: FileManager
+
+    init(payloadDirectory: URL? = nil, fileManager: FileManager = .default) {
+        self.payloadDirectory = payloadDirectory
+        self.fileManager = fileManager
+        super.init()
+    }
+}
+```
+
+### Exposing internals for testing
+
+Change `private` to `internal` (no keyword = internal in Swift) to allow `@testable import` access. Add a comment explaining the intent:
+
+```swift
+// Internal (not private) so @testable import KeriWallet can exercise this
+// logic without requiring a live WKURLSchemeTask.
+func loadResource(for url: URL) throws -> (Data, String, [String: String]) { ... }
+```
+
+Do NOT use `@testable` backdoors to reach truly private implementation details — that signals the function should be refactored into a testable type.
+
+### SwiftLint in test files
+
+Test files must pass `make lint --strict`. Patterns that trigger violations:
+
+```swift
+// BAD — force unwrap in test setup
+let url = URL(string: "app://local/index.html")!
+
+// GOOD — use try #require in swift-testing
+let url = try #require(URL(string: "app://local/index.html"))
+
+// BAD — XCTUnwrap (XCTest only)
+let url = try XCTUnwrap(URL(string: "app://local/index.html"))
+```
+
+The `force_unwrapping` rule applies equally to test files. `.swiftlint.yml` includes `KeriWalletTests/` in the lint target.

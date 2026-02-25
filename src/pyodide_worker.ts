@@ -9,6 +9,7 @@
 
 import { BLAKE3_WHEEL, PYCHLORIDE_WHEEL, WORKER_LOG_ID } from './constants';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
+import { routeMessage } from './worker_router';
 
 // loadPyodide is injected into the worker scope at runtime via importScripts.
 declare function loadPyodide(opts: { indexURL: string }): Promise<PyodideInterface>;
@@ -78,78 +79,15 @@ _sk_bytes = _kp[1]   # secret key  (64 bytes)
     workerLog('boot complete');
 }
 
-async function handleBlake3Hash(id: string, data: string): Promise<WorkerOutbound> {
-    const hex: string = await pyodide!.runPythonAsync(
-        `_binascii.hexlify(_blake3.blake3(${JSON.stringify(data)}.encode()).digest()).decode()`,
-    );
-    return { id, type: 'blake3_result', hex };
-}
-
-async function handleSign(id: string, message: string): Promise<WorkerOutbound> {
-    const result = await pyodide!.runPythonAsync(`
-_msg = ${JSON.stringify(message)}.encode()
-_sig = _sodium.crypto_sign_detached(_msg, _sk_bytes)
-(_binascii.hexlify(_sig).decode(), _binascii.hexlify(_pk_bytes).decode())
-`);
-    // Pyodide returns a Python tuple — convert to JS array.
-    const [signature, publicKey] = result.toJs
-        ? (result.toJs() as [string, string])
-        : (result as [string, string]);
-    if (result.destroy) result.destroy();
-    return { id, type: 'sign_result', signature, publicKey };
-}
-
-async function handleVerify(
-    id: string,
-    message: string,
-    signature: string,
-    publicKey: string,
-): Promise<WorkerOutbound> {
-    const result = await pyodide!.runPythonAsync(`
-try:
-    _sodium.crypto_sign_verify_detached(
-        _binascii.unhexlify(${JSON.stringify(signature)}),
-        ${JSON.stringify(message)}.encode(),
-        _binascii.unhexlify(${JSON.stringify(publicKey)}),
-    )
-    _vresult = True
-except Exception:
-    _vresult = False
-_vresult
-`);
-    // Pyodide may return a PyProxy wrapping the Python bool rather than a native
-    // JS boolean — same issue as handleSign. Explicitly extract via .toJs() and
-    // release the proxy to avoid postMessage serialisation failures.
-    const valid: boolean = result?.toJs ? Boolean(result.toJs()) : Boolean(result);
-    if (result?.destroy) result.destroy();
-    return { id, type: 'verify_result', valid };
-}
-
 self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
     const cmd = ev.data;
     let out: WorkerOutbound;
     try {
-        switch (cmd.type) {
-            case 'init':
-                await boot(cmd.origin);
-                out = { id: cmd.id, type: 'ready' };
-                break;
-            case 'blake3_hash':
-                if (!booted) { out = { id: cmd.id, type: 'error', error: 'worker not initialized' }; break; }
-                out = await handleBlake3Hash(cmd.id, cmd.data);
-                break;
-            case 'sign':
-                if (!booted) { out = { id: cmd.id, type: 'error', error: 'worker not initialized' }; break; }
-                out = await handleSign(cmd.id, cmd.message);
-                break;
-            case 'verify':
-                if (!booted) { out = { id: cmd.id, type: 'error', error: 'worker not initialized' }; break; }
-                out = await handleVerify(cmd.id, cmd.message, cmd.signature, cmd.publicKey);
-                break;
-            default: {
-                const exhaustive: never = cmd;
-                out = { id: (exhaustive as { id: string }).id, type: 'error', error: 'unknown command' };
-            }
+        if (cmd.type === 'init') {
+            await boot(cmd.origin);
+            out = { id: cmd.id, type: 'ready' };
+        } else {
+            out = await routeMessage(cmd, pyodide, booted);
         }
     } catch (e) {
         out = { id: cmd.id, type: 'error', error: String(e) };

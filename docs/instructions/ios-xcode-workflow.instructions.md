@@ -54,14 +54,29 @@ The daily development loop:
 1. Edit Swift/TypeScript in VS Code
 2. make sync          (if web payload changed)
 3. make lint          (SwiftLint — catch style/safety issues early)
-4. make build         (build for Simulator)
-5. make test          (run tests)
-6. make open → ⌘R    (run on Simulator via Xcode)
+4. make lint-ts       (TypeScript type check)
+5. make build         (build for Simulator)
+6. make test-swift    (run Swift tests on Simulator)
+7. make test-ts       (run TypeScript unit tests, ~100ms)
+8. make test-e2e      (run Playwright structural E2E tests, ~5s)
+9. make open → ⌘R    (run on Simulator via Xcode)
 ```
 
 > Run `make help` from `libs/Fort-ios/` to see all available targets.
 > The Makefile's simulator destination (e.g., `iPhone 17 Pro`) may differ from
 > the `iPhone 15` placeholder used in `xcodebuild` examples below.
+
+### Makefile test targets (ADR-030)
+
+| Target | Command | When to use |
+|--------|---------|-------------|
+| `make test-swift` | `xcodebuild test` on Simulator | Swift unit + UI tests; CI gate |
+| `make test-ts` | `vitest run` | TypeScript unit tests; fast local check |
+| `make test-e2e` | `vite build` + `playwright test --grep-invert @slow` | Structural browser tests; excludes 120s Pyodide boot |
+| `make test-e2e-slow` | `vite build` + `playwright test` | Full E2E including Pyodide roundtrip; nightly/manual |
+| `make test-all` | test-swift + test-ts + test-e2e | Full test pass before PR |
+| `make bridge-check` | `gen-bridge-contract.mjs --check` + `git diff --exit-code` | Ensure BridgeContract.swift and bridge-contract.ts are in sync |
+| `make lint-ts` | `tsc --noEmit` | TypeScript type checking without emitting files |
 
 ### When to use Xcode GUI
 
