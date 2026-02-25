@@ -13,7 +13,7 @@
 		"/opt/homebrew/bin/xcode-build-server"
 	],
 	"workspace": "/Users/jay-alexanderelliot/Projects/keri-notes/libs/Fort-ios/xcodeproj/KeriWallet/KeriWallet.xcodeproj/project.xcworkspace",
-	"build_root": "/Users/jay-alexanderelliot/Library/Developer/Xcode/DerivedData/KeriWallet-cegyrqtsgehlqrcpmsitohluzpxp",
+	"build_root": "/Users/jay-alexanderelliot/Library/Developer/Xcode/DerivedData/KeriWallet-ebmpdpqafrnnpuacoqoyzhoftngb",
 	"scheme": "KeriWallet",
 	"kind": "xcode"
 }
