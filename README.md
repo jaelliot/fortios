@@ -38,6 +38,15 @@ The two layers communicate through a typed JS↔Swift bridge (`bridge-contract.j
 
 > mise manages the Node version — you do not need to install Node manually.
 
+### Python version constraint (Pyodide)
+
+Pyodide currently ships Python **3.13**. Any Python code loaded in the web payload
+(via `runPythonAsync`) must be compatible with 3.13 — do not use Python 3.14-only
+features until Pyodide releases a 3.14 build. This applies regardless of what
+keripy uses on the server side. See the
+[2026-02-24 meeting](../../docs/meetings/raw-transcripts/2026-02/2026-02-24-pt-3.md)
+for Sam's directive on this constraint.
+
 ---
 
 ## 2. First-time setup
@@ -140,10 +149,15 @@ src/ + public/pyodide/  →  npm run build:ci  →  dist/  →  sync-payload.sh 
                                                                           into the .app at build time
 ```
 
-**`sync-payload.sh`** (invoked by `make sync`) does the following:
+The pipeline is split into two scripts:
+
+**`build-payload.sh`** (shared, platform-agnostic core):
 
 1. Runs `npm ci && npm run build:ci` to produce a deterministic `dist/`.
 2. Verifies `dist/build-manifest.json` exists and has the required fields.
+
+**`sync-payload.sh`** (iOS-specific, invoked by `make sync`) sources `build-payload.sh`, then:
+
 3. Sanitises `python_stdlib.zip` — replaces `itms-services` with `itms_services` in `urllib/parse.py` (prevents automated App Store rejection).
 4. Cleans stale files from `WebPayload/`.
 5. Copies `dist/` contents into `WebPayload/`.
@@ -211,10 +225,10 @@ make test-all   # test-swift + test-ts + test-e2e
 
 ## 8. Bridge contract
 
-The JS↔Swift bridge is governed by a typed contract so both sides stay in sync.
+The JS↔native bridge is governed by a typed contract so all sides stay in sync.
 
 - **Source of truth:** `bridge-contract.json` (committed)
-- **Generated:** `src/bridge-contract.ts` (TypeScript types) and `KeriWallet/BridgeContract.swift` (Swift constants)
+- **Generated:** `src/bridge-contract.ts` (TypeScript), `KeriWallet/BridgeContract.swift` (Swift), and `generated/BridgeContract.kt` (Kotlin for Fort-android)
 - **Verify sync:** `make bridge-check` (exits non-zero if generated output differs from committed JSON)
 
 The `prebuild` npm hook regenerates both files automatically before every build. In CI, `make bridge-check` must pass before tests run.
@@ -233,16 +247,19 @@ Message envelope shape (JS → Swift):
 Fort-ios/
 ├── src/                        # TypeScript source
 │   ├── main.ts                 # Entry point — mounts UI, boots worker
+│   ├── bridge_adapter.ts       # Platform-agnostic bridge transport (iOS/Android/no-op)
 │   ├── pyodide_worker.ts       # Web Worker — WASM bootstrap lifecycle
 │   ├── worker_router.ts        # Pure message dispatch (testable without WASM)
 │   ├── bridge-contract.ts      # Generated — do not edit by hand
 │   └── __tests__/              # Vitest unit tests
+├── generated/
+│   └── BridgeContract.kt       # Generated Kotlin constants (for Fort-android)
 ├── public/
 │   └── pyodide/                # Gitignored — populated by `make pyodide`
 ├── playwright/
 │   └── app.spec.ts             # Playwright E2E tests
 ├── tools/
-│   ├── gen-bridge-contract.mjs # Generates bridge-contract.ts + BridgeContract.swift
+│   ├── gen-bridge-contract.mjs # Generates bridge-contract.ts + BridgeContract.swift + BridgeContract.kt
 │   └── gen-build-manifest.mjs  # Generates dist/build-manifest.json
 ├── scripts/
 │   └── download-pyodide.sh     # Downloads Pyodide runtime + wheels
@@ -267,11 +284,14 @@ Fort-ios/
 ├── Config/
 │   ├── Debug.xcconfig
 │   └── Release.xcconfig
+├── generated/
+│   └── BridgeContract.kt       # Generated Kotlin constants (for Fort-android)
 ├── docs/
-│   ├── adr/                    # Architecture Decision Records (ADR-022 → ADR-030)
+│   ├── adr/                    # Architecture Decision Records (ADR-022 → ADR-031)
 │   └── instructions/           # Coding standards and how-to guides
-├── bridge-contract.json        # Source of truth for the JS↔Swift bridge
-├── sync-payload.sh             # Payload sync script (invoked by `make sync`)
+├── bridge-contract.json        # Source of truth for the JS↔native bridge
+├── build-payload.sh            # Platform-agnostic build core (sourced by sync scripts)
+├── sync-payload.sh             # iOS-specific payload sync (invoked by `make sync`)
 ├── Makefile                    # All developer commands — start here
 ├── vite.config.ts
 ├── vitest.config.ts
@@ -299,6 +319,7 @@ Fort-ios/
 | [ADR-028](docs/adr/ADR-028-ios-swiftlint-type-inference-strategy.md) | SwiftLint & type-inference strategy | Lint rules, explicit type annotation policy |
 | [ADR-029](docs/adr/ADR-029-fort-ios-subtree-extraction.md) | Fort-ios subtree extraction | How this repo was extracted from keri-notes as a git subtree |
 | [ADR-030](docs/adr/ADR-030-ios-ts-testing-architecture.md) | iOS + TypeScript testing architecture | Three-layer test pyramid, Vitest/Playwright/swift-testing choices |
+| [ADR-031](docs/adr/ADR-031-cross-platform-shared-web-payload.md) | Cross-platform shared web payload | Bridge adapter abstraction, Kotlin codegen, factored build pipeline |
 
 ### Coding standards
 

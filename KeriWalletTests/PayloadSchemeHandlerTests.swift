@@ -60,12 +60,12 @@ struct PathNormalisationTests {
 
     @Test("root path resolves to index.html")
     func rootPathResolvesToIndex() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let indexURL = tmp.appendingPathComponent("index.html")
+        let indexURL: URL = tmp.appendingPathComponent("index.html")
         _ = try writeFile(indexURL, content: "<html></html>")
 
         let handler = makeHandler(dir: tmp)
@@ -77,7 +77,7 @@ struct PathNormalisationTests {
 
     @Test("percent-encoded path is decoded")
     func percentEncodedPath() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -92,7 +92,7 @@ struct PathNormalisationTests {
 
     @Test("dot-dot segment throws disallowedPath")
     func dotDotThrows() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -106,7 +106,7 @@ struct PathNormalisationTests {
 
     @Test("single-dot segment throws disallowedPath")
     func singleDotThrows() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -120,7 +120,7 @@ struct PathNormalisationTests {
 
     @Test("missing file throws missingResource")
     func missingFileThrows() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -134,7 +134,7 @@ struct PathNormalisationTests {
 
     @Test("oversized file throws resourceTooLarge")
     func oversizedFileThrows() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -151,13 +151,13 @@ struct PathNormalisationTests {
 
     @Test("non-app scheme throws invalidURL")
     func wrongSchemeThrows() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let handler = makeHandler(dir: tmp)
-        let url = URL(string: "https://example.com/index.html")!
+        let url: URL = URL(string: "https://example.com/index.html")!
         #expect(throws: PayloadSchemeError.invalidURL) {
             _ = try handler.loadResource(for: url)
         }
@@ -165,7 +165,7 @@ struct PathNormalisationTests {
 
     @Test("COOP/COEP/CORP headers are present in response")
     func crossOriginIsolationHeaders() throws {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -178,5 +178,45 @@ struct PathNormalisationTests {
         #expect(headers["Cross-Origin-Opener-Policy"] == "same-origin")
         #expect(headers["Cross-Origin-Embedder-Policy"] == "require-corp")
         #expect(headers["Cross-Origin-Resource-Policy"] == "cross-origin")
+    }
+
+    @Test("binary file returns correct MIME and no charset suffix")
+    func binaryFileMIME() throws {
+        let tmp: URL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        // Write a small binary file posing as a .wasm module
+        let wasmURL: URL = tmp.appendingPathComponent("test.wasm")
+        let wasmBytes: Data = Data([0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00])
+        try wasmBytes.write(to: wasmURL)
+
+        let handler = makeHandler(dir: tmp)
+        let url = URL(string: "\(AppConfig.Scheme.name)://local/test.wasm")!
+        let (data, mime, _) = try handler.loadResource(for: url)
+
+        #expect(data == wasmBytes)
+        #expect(mime == "application/wasm")
+        // Binary MIME must NOT have charset suffix
+        #expect(!mime.contains("charset"))
+    }
+
+    @Test("wheel file returns application/zip MIME")
+    func wheelFileMIME() throws {
+        let tmp: URL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let whlURL: URL = tmp.appendingPathComponent("package.whl")
+        try Data([0x50, 0x4B, 0x03, 0x04]).write(to: whlURL)
+
+        let handler = makeHandler(dir: tmp)
+        let url = URL(string: "\(AppConfig.Scheme.name)://local/package.whl")!
+        let (_, mime, _) = try handler.loadResource(for: url)
+
+        #expect(mime == "application/zip")
+        #expect(!mime.contains("charset"))
     }
 }

@@ -9,7 +9,8 @@
 
 import { BLAKE3_WHEEL, PYCHLORIDE_WHEEL, WORKER_LOG_ID } from './constants';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
-import { routeMessage } from './worker_router';
+import type { WorkerKV } from './worker_router';
+import { openIdbKV, routeMessage } from './worker_router';
 
 // loadPyodide is injected into the worker scope at runtime via importScripts.
 declare function loadPyodide(opts: { indexURL: string }): Promise<PyodideInterface>;
@@ -18,7 +19,9 @@ declare function loadPyodide(opts: { indexURL: string }): Promise<PyodideInterfa
 // have no meaningful self.location.origin.
 let pyodideBase = '';
 let wheelBase = '';
+let pythonBase = '';
 let pyodide: PyodideInterface | null = null;
+let kv: WorkerKV | null = null;
 let booted = false;
 
 /** Fire-and-forget log message back to main thread (forwarded to bridge). */
@@ -38,9 +41,21 @@ async function installWheel(url: string): Promise<void> {
     (pyodide as any).unpackArchive(buffer, 'wheel');
 }
 
+/**
+ * Fetch a Python source file and write it into Pyodide's virtual filesystem
+ * at the given import path (relative to site-packages or cwd).
+ */
+async function installPythonFile(url: string, destPath: string): Promise<void> {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`python file fetch failed: ${url} (${resp.status})`);
+    const text = await resp.text();
+    (pyodide as any).FS.writeFile(destPath, text);
+}
+
 async function boot(origin: string): Promise<void> {
     pyodideBase = `${origin}/pyodide/`;
     wheelBase = `${origin}/pyodide/wheels/`;
+    pythonBase = `${origin}/python/`;
 
     // importScripts is synchronous — injects loadPyodide() into the worker scope.
     workerLog('loading pyodide.js');
@@ -63,20 +78,84 @@ async function boot(origin: string): Promise<void> {
         installWheel(pychlorideUrl),
     ]);
 
-    // Pre-import and generate a persistent Ed25519 session keypair.
-    workerLog('importing crypto modules + generating session keypair');
+    // Install Python shim modules (pysodium compat, lmdb stub, IndexedDB backend)
+    workerLog('installing python shims + IndexedDB backend');
+    await Promise.all([
+        installPythonFile(`${pythonBase}pysodium.py`, '/home/pyodide/pysodium.py'),
+        installPythonFile(`${pythonBase}lmdb.py`, '/home/pyodide/lmdb.py'),
+        installPythonFile(`${pythonBase}indexeddb_python.py`, '/home/pyodide/indexeddb_python.py'),
+    ]);
+
+    // Install hio subset (required for keripy imports: doing, decking, ogling, etc.)
+    workerLog('installing hio subset');
+    const hioBase = `${pythonBase}hio/`;
+    const hioRoot = '/home/pyodide/hio';
+    const hioDirs = ['', '/base', '/core', '/core/http', '/help'];
+    for (const dir of hioDirs) {
+        (pyodide as any).FS.mkdirTree(`${hioRoot}${dir}`);
+    }
+    const hioFiles: [string, string][] = [
+        ['__init__.py', '__init__.py'],
+        ['hioing.py', 'hioing.py'],
+        ['base/__init__.py', 'base/__init__.py'],
+        ['base/basing.py', 'base/basing.py'],
+        ['base/doing.py', 'base/doing.py'],
+        ['base/tyming.py', 'base/tyming.py'],
+        ['core/__init__.py', 'core/__init__.py'],
+        ['core/http/__init__.py', 'core/http/__init__.py'],
+        ['core/http/httping.py', 'core/http/httping.py'],
+        ['help/__init__.py', 'help/__init__.py'],
+        ['help/decking.py', 'help/decking.py'],
+        ['help/helping.py', 'help/helping.py'],
+        ['help/hicting.py', 'help/hicting.py'],
+        ['help/ogling.py', 'help/ogling.py'],
+        ['help/timing.py', 'help/timing.py'],
+    ];
+    await Promise.all(
+        hioFiles.map(([src, dest]) =>
+            installPythonFile(`${hioBase}${src}`, `${hioRoot}/${dest}`),
+        ),
+    );
+    workerLog(`hio subset installed (${hioFiles.length} files)`);
+
+    // NOTE: micropip is intentionally NOT loaded here.
+    // The bundled app runs under `app://` with no network access to PyPI.
+    // micropip.install() would fail even if the micropip wheel were bundled.
+    // When keripy deps are needed, bundle them as wheels and use installWheel()
+    // via the same unpackArchive pattern used for blake3/pychloride.
+
+    // ── Persistence: pure-JS IndexedDB ──────────────────────────────────
+    // Pyodide's create_proxy callbacks don't fire in WKWebView blob: Workers,
+    // so Python↔IDB is broken.  Instead we open a plain JS IndexedDB store
+    // and handle db_save / db_load / db_delete entirely in JavaScript.
+    workerLog('opening JS-level IndexedDB');
+    try {
+        kv = await openIdbKV();
+        workerLog('IndexedDB ready (JS-level persistence)');
+    } catch (e) {
+        workerLog(`IndexedDB open failed — ephemeral mode: ${e}`);
+        kv = null;
+    }
+
+    // Pre-import crypto modules.
+    workerLog('importing crypto modules');
     await pyodide.runPythonAsync(`
 import blake3 as _blake3
 import pychloride as _sodium
 import binascii as _binascii
+import json as _json
+`);
 
+    // Generate ephemeral Ed25519 session keypair (not persisted across launches).
+    workerLog('generating ephemeral session keypair');
+    await pyodide.runPythonAsync(`
 _kp = _sodium.crypto_sign_keypair()
-_pk_bytes = _kp[0]   # public key  (32 bytes)
-_sk_bytes = _kp[1]   # secret key  (64 bytes)
+_pk_bytes = _kp[0]
+_sk_bytes = _kp[1]
 `);
 
     booted = true;
-    workerLog('boot complete');
+    workerLog(`boot complete — crypto ready, persistence: ${kv ? 'IndexedDB' : 'ephemeral'}`);
 }
 
 self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
@@ -87,7 +166,7 @@ self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
             await boot(cmd.origin);
             out = { id: cmd.id, type: 'ready' };
         } else {
-            out = await routeMessage(cmd, pyodide, booted);
+            out = await routeMessage(cmd, pyodide, booted, kv);
         }
     } catch (e) {
         out = { id: cmd.id, type: 'error', error: String(e) };

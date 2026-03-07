@@ -6,7 +6,7 @@ import Testing
 @Suite("WebBridgeEnvelope decoding")
 struct WebBridgeEnvelopeTests {
 
-    private let decoder = JSONDecoder()
+    private let decoder: JSONDecoder = JSONDecoder()
 
     private func envelope(_ json: String) throws -> WebBridgeEnvelope {
         let data = try #require(json.data(using: .utf8))
@@ -63,7 +63,7 @@ struct WebBridgeEnvelopeTests {
 
     @Test("throws on unknown type discriminant")
     func throwsOnUnknownType() throws {
-        let json = """
+        let json: String = """
         {"type":"__unknown__","timestamp":"t","message":"x"}
         """
         let data = try #require(json.data(using: .utf8))
@@ -74,7 +74,7 @@ struct WebBridgeEnvelopeTests {
 
     @Test("throws when type field is missing")
     func throwsWhenTypeFieldMissing() throws {
-        let json = """
+        let json: String = """
         {"timestamp":"t","message":"x"}
         """
         let data = try #require(json.data(using: .utf8))
@@ -122,5 +122,59 @@ struct BridgeContractTests {
         #expect(WebBridgeMessageType.log.rawValue == BridgeContract.bridgeLog)
         #expect(WebBridgeMessageType.lifecycle.rawValue == BridgeContract.bridgeLifecycle)
         #expect(WebBridgeMessageType.cryptoResult.rawValue == BridgeContract.bridgeCryptoResult)
+    }
+}
+
+// MARK: - CryptoResultPayload decoding
+
+@Suite("CryptoResultPayload decoding")
+struct CryptoResultPayloadTests {
+
+    private let decoder: JSONDecoder = JSONDecoder()
+
+    private func payload(_ json: String) throws -> CryptoResultPayload {
+        let data = try #require(json.data(using: .utf8))
+        return try decoder.decode(CryptoResultPayload.self, from: data)
+    }
+
+    @Test("decodes successful result with id and message")
+    func decodesSuccess() throws {
+        let p = try payload("""
+        {"id":"w1234","message":"{\\"type\\":\\"blake3_result\\",\\"hex\\":\\"ab\\"}"}
+        """)
+        #expect(p.id == "w1234")
+        #expect(p.message.contains("blake3_result"))
+        #expect(p.error == nil)
+    }
+
+    @Test("decodes result with error field")
+    func decodesError() throws {
+        let p = try payload("""
+        {"id":"w5678","message":"","error":"worker not initialized"}
+        """)
+        #expect(p.id == "w5678")
+        #expect(p.error == "worker not initialized")
+    }
+
+    @Test("throws when id field is missing")
+    func throwsWhenIdMissing() throws {
+        let json: String = """
+        {"message":"{}"}
+        """
+        let data = try #require(json.data(using: .utf8))
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(CryptoResultPayload.self, from: data)
+        }
+    }
+
+    @Test("throws when message field is missing")
+    func throwsWhenMessageMissing() throws {
+        let json: String = """
+        {"id":"w1"}
+        """
+        let data = try #require(json.data(using: .utf8))
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(CryptoResultPayload.self, from: data)
+        }
     }
 }

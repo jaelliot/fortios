@@ -28,6 +28,17 @@ export const BLAKE3_WHEEL = 'blake3-1.0.8-cp313-cp313-pyodide_2025_0_wasm32.whl'
 /** Pychloride wheel filename (stable name set by download-pyodide.sh). */
 export const PYCHLORIDE_WHEEL = 'pychloride.whl';
 
+// ── Pyodide ──────────────────────────────────────────────────────────────────
+/** Pinned Pyodide version — must match download-pyodide.sh and wheel tags. */
+export const PYODIDE_VERSION = '0.29.1';
+
+// ── IndexedDB ────────────────────────────────────────────────────────────────
+/** Database name used by IndexedDBer for wallet persistence. */
+export const IDB_DATABASE_NAME = 'keri-wallet';
+
+/** IndexedDB store name for the default key-value namespace. */
+export const IDB_DEFAULT_STORE = 'main';
+
 // ── Demo / Proof ─────────────────────────────────────────────────────────────
 /** Challenge string used in the boot-time proof-of-concept crypto cycle. */
 export const PROOF_CHALLENGE = 'keriwasm proof vector v1';

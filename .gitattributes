@@ -1,0 +1,70 @@
+# Copyright (c) Vaidya Solutions
+# SPDX-License-Identifier: BSD-3-Clause
+
+# =============================================================================
+# Git Attributes Configuration
+# =============================================================================
+# @file .gitattributes
+# @description Git attributes for proper file handling and syntax detection
+# @update-policy Update when new file types or patterns are added
+
+# -----------------------------------------------------------------------------
+# Dockerfiles - Named Pattern
+# -----------------------------------------------------------------------------
+# Ensure all Dockerfile.* files are recognized as Dockerfiles
+# This enables proper syntax highlighting and diff formatting in GitHub/GitLab
+Dockerfile.* linguist-language=Dockerfile
+
+# -----------------------------------------------------------------------------
+# Line Endings
+# -----------------------------------------------------------------------------
+# Ensure consistent line endings across platforms
+* text=auto eol=lf
+
+# Force LF for shell scripts (even on Windows)
+*.sh text eol=lf
+
+# Force LF for Makefiles (tabs must be preserved)
+Makefile text eol=lf
+*.mk text eol=lf
+
+# -----------------------------------------------------------------------------
+# Binary Files
+# -----------------------------------------------------------------------------
+# Prevent Git from attempting to diff binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# -----------------------------------------------------------------------------
+# Language-Specific
+# -----------------------------------------------------------------------------
+# Go
+*.go text eol=lf
+
+# Elixir
+*.ex text eol=lf
+*.exs text eol=lf
+
+# JavaScript/TypeScript
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# YAML
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# JSON
+*.json text eol=lf

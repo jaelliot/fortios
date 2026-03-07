@@ -15,13 +15,19 @@
         "init",
         "blake3_hash",
         "sign",
-        "verify"
+        "verify",
+        "db_save",
+        "db_load",
+        "db_delete"
     ],
     "workerResultTypes": [
         "ready",
         "blake3_result",
         "sign_result",
         "verify_result",
+        "db_save_result",
+        "db_load_result",
+        "db_delete_result",
         "error",
         "log"
     ]

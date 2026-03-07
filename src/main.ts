@@ -1,6 +1,7 @@
 import { BRIDGE_HANDLER_NAME, LOADING_FADE_MS, PROOF_CHALLENGE, WORKER_ID_PREFIX } from './constants';
 import PyodideWorker from './pyodide_worker?worker';
-import type { BridgeEnvelope, NativeCommand, WorkerInbound, WorkerOutbound } from './types';
+import type { BridgeAdapter, BridgeEnvelope, NativeCommand, WorkerInbound, WorkerOutbound } from './types';
+import { createBridgeAdapter } from './bridge_adapter';
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 const loadingEl = document.getElementById('loading');
@@ -9,6 +10,15 @@ const appEl = document.getElementById('app');
 const statusEl = document.getElementById('status');
 const statusDotEl = document.getElementById('status-dot');
 const outputEl = document.getElementById('output');
+
+// Profile form elements (IndexedDB persistence demo)
+const profileIdEl = document.getElementById('profile-id') as HTMLInputElement | null;
+const profileNameEl = document.getElementById('profile-name') as HTMLInputElement | null;
+const profileNoteEl = document.getElementById('profile-note') as HTMLTextAreaElement | null;
+const btnSaveEl = document.getElementById('btn-save');
+const btnLoadEl = document.getElementById('btn-load');
+const dbStatusEl = document.getElementById('db-status');
+const recordJsonEl = document.getElementById('record-json');
 
 function setLoadingStatus(text: string): void {
     if (loadingStatusEl) loadingStatusEl.textContent = text;
@@ -40,9 +50,10 @@ function isoNow(): string {
     return new Date().toISOString();
 }
 
+// ── Bridge adapter (platform-agnostic) ────────────────────────────────────────
+const bridge: BridgeAdapter = createBridgeAdapter();
+
 function postToBridge(payload: BridgeEnvelope): void {
-    const bridge = (window as unknown as { webkit?: any }).webkit?.messageHandlers?.[BRIDGE_HANDLER_NAME];
-    if (!bridge || typeof bridge.postMessage !== 'function') return;
     try { bridge.postMessage(payload); } catch { /* best-effort */ }
 }
 
@@ -145,6 +156,84 @@ async function initPyodide(): Promise<void> {
         })();
     };
 
+// ── Profile persistence (IndexedDB via worker) ───────────────────────────────
+
+function setDbStatus(text: string, ok = true): void {
+    if (dbStatusEl) {
+        dbStatusEl.textContent = `${ok ? '●' : '○'} ${text}`;
+        dbStatusEl.style.color = ok ? 'var(--status-done)' : 'var(--status-error)';
+    }
+}
+
+async function saveProfile(): Promise<void> {
+    const id = profileIdEl?.value.trim();
+    const name = profileNameEl?.value.trim();
+    if (!id) { setDbStatus('Profile ID is required.', false); return; }
+    if (!name) { setDbStatus('Name is required.', false); return; }
+
+    const record = {
+        id,
+        name,
+        note: profileNoteEl?.value ?? '',
+        updated_at: isoNow(),
+    };
+
+    const cmdId = generateId();
+    const result = await sendToWorker({
+        id: cmdId,
+        type: 'db_save',
+        key: `profile:${id}`,
+        value: JSON.stringify(record),
+    });
+
+    if (result.type === 'db_save_result' && result.ok) {
+        setDbStatus(`Saved profile '${id}'.`);
+        if (recordJsonEl) recordJsonEl.textContent = JSON.stringify(record, null, 2);
+        log(`saved profile id=${id}`);
+    } else {
+        setDbStatus(`Save failed: ${result.type === 'error' ? result.error : 'unknown'}`, false);
+    }
+}
+
+async function loadProfile(): Promise<void> {
+    const id = profileIdEl?.value.trim();
+    if (!id) { setDbStatus('Enter a Profile ID to load.', false); return; }
+
+    const cmdId = generateId();
+    const result = await sendToWorker({
+        id: cmdId,
+        type: 'db_load',
+        key: `profile:${id}`,
+    });
+
+    if (result.type === 'db_load_result') {
+        if (result.value === null) {
+            setDbStatus(`No profile found for '${id}'.`, false);
+            if (recordJsonEl) recordJsonEl.textContent = 'No record loaded.';
+        } else {
+            try {
+                const record = JSON.parse(result.value);
+                if (profileNameEl) profileNameEl.value = record.name ?? '';
+                if (profileNoteEl) profileNoteEl.value = record.note ?? '';
+                if (recordJsonEl) recordJsonEl.textContent = JSON.stringify(record, null, 2);
+                setDbStatus(`Loaded profile '${id}'.`);
+                log(`loaded profile id=${id}`);
+            } catch {
+                setDbStatus('Stored data is corrupt (invalid JSON).', false);
+                if (recordJsonEl) recordJsonEl.textContent = result.value;
+            }
+        }
+    } else {
+        setDbStatus(`Load failed: ${result.type === 'error' ? result.error : 'unknown'}`, false);
+    }
+}
+
+function installProfileHandlers(): void {
+    btnSaveEl?.addEventListener('click', () => { void saveProfile(); });
+    btnLoadEl?.addEventListener('click', () => { void loadProfile(); });
+    setDbStatus('Ready. Enter profile id and name, then Save or Load.');
+}
+
 // ── Boot-time proof ───────────────────────────────────────────────────────────
 async function runProof(): Promise<void> {
     const probe = PROOF_CHALLENGE;
@@ -174,6 +263,7 @@ async function main(): Promise<void> {
 
     setLoadingStatus('Running crypto proof…');
     showApp();
+    installProfileHandlers();
 
     setStatus('running proof');
     await runProof();

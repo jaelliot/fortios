@@ -1,0 +1,200 @@
+# ==============================================================================
+# .copilotignore — GitHub Copilot context exclusions
+# ==============================================================================
+# Excludes auto-generated, compiled, dependency, secret, and high-noise content
+# so Copilot context window is spent on actual source code and documentation.
+#
+# Mirrors the tree command exclusion list used in docs/shared/directory-tree.md
+# plus workspace-specific additions discovered from the actual repo structure.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Version control
+# ------------------------------------------------------------------------------
+.git/
+
+# ------------------------------------------------------------------------------
+# Dependencies (never source-of-truth, always derivable from lock files)
+# ------------------------------------------------------------------------------
+node_modules/
+vendor/
+deps/
+
+# ------------------------------------------------------------------------------
+# Build output & compiled artifacts
+# ------------------------------------------------------------------------------
+dist/
+build/
+_build/
+out/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.test
+
+# Go compiled binaries (project-specific)
+bin/gideon
+bin/devtools
+bin/devenv
+
+# TypeScript / JavaScript compiled output
+*.js.map
+*.d.ts.map
+*.tsbuildinfo
+
+# Minified assets
+*.min.js
+*.min.css
+
+# esbuild output directories
+esbuild/
+
+# Next.js build output
+.next/
+.next-env.d.ts
+
+# ------------------------------------------------------------------------------
+# Package manager lock files (auto-generated, noisy, not useful for codegen)
+# ------------------------------------------------------------------------------
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# ------------------------------------------------------------------------------
+# Test artifacts
+# ------------------------------------------------------------------------------
+coverage/
+htmlcov/
+*.out
+test-reports/
+test-results/
+.vitest/
+
+# ------------------------------------------------------------------------------
+# Logs and temporary files
+# ------------------------------------------------------------------------------
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# ------------------------------------------------------------------------------
+# Cache directories
+# ------------------------------------------------------------------------------
+.cache/
+**/.cache/
+.eslintcache
+.turbo/
+.vite/
+.vite-inspect/
+*.tsbuildinfo
+
+# ------------------------------------------------------------------------------
+# Terraform (generated state, provider plugins — not source)
+# ------------------------------------------------------------------------------
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+# .terraform.lock.hcl is intentionally NOT ignored — it's committed for reproducibility
+
+# ------------------------------------------------------------------------------
+# Python (not primary language, but scripts exist)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+
+# ------------------------------------------------------------------------------
+# IDE / editor artifacts
+# ------------------------------------------------------------------------------
+.idea/
+*.iml
+*.swp
+*.swo
+*.swn
+.DS_Store
+Thumbs.db
+.elixir_ls/
+
+# ------------------------------------------------------------------------------
+# AWS / Amplify generated files
+# ------------------------------------------------------------------------------
+.amplify-hosting/
+.amplify/
+amplify-outputs.json
+amplify/
+# Note: compose/.env and compose/.env.onprem.secrets contain live credentials
+compose/.env
+compose/.env.onprem
+compose/.env.onprem.secrets
+
+# ------------------------------------------------------------------------------
+# Database files
+# ------------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ------------------------------------------------------------------------------
+# Sensitive configuration / secrets
+# ------------------------------------------------------------------------------
+*.example.env
+.env
+.env.*
+!.env.example
+!.env.template
+*secrets*.yml
+*secrets*.yaml
+*credentials*.json
+*.pem
+*.key
+*.cert
+*.p12
+
+# ------------------------------------------------------------------------------
+# CI/CD artifacts
+# ------------------------------------------------------------------------------
+.github/workflows/.artifacts/
+
+# ------------------------------------------------------------------------------
+# Large / auto-generated documentation (high token cost, low signal)
+# ------------------------------------------------------------------------------
+# Archived and completed work — historical record, not active context
+docs/archive/
+docs/deferred/
+docs/daily-summaries/
+
+# Shared task management, research scratchpads, session handoffs
+docs/shared/tasks/
+docs/shared/research/
+docs/shared/drafts/
+docs/shared/sessions/
+docs/shared/tree-snapshots/
+docs/shared/directory-tree.md
+
+# GitHub Copilot instruction files (loaded separately by the IDE, not code context)
+.github/instructions/
+.github/rules/
+
+# Bootstrap / scaffolding docs (one-time setup, not ongoing reference)
+docs/shared/bootstrap/
+
+# ------------------------------------------------------------------------------
+# Generated Go code
+# ------------------------------------------------------------------------------
+*_generated.go
+*.pb.go
+mock_*.go

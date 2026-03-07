@@ -13,7 +13,10 @@ export type WorkerInbound =
     | { id: string; type: 'init'; origin: string }
     | { id: string; type: 'blake3_hash'; data: string }
     | { id: string; type: 'sign'; message: string }
-    | { id: string; type: 'verify'; message: string; signature: string; publicKey: string };
+    | { id: string; type: 'verify'; message: string; signature: string; publicKey: string }
+    | { id: string; type: 'db_save'; key: string; value: string }
+    | { id: string; type: 'db_load'; key: string }
+    | { id: string; type: 'db_delete'; key: string };
 
 // ── Worker outbound (worker → main) ──────────────────────────────────────────
 export type WorkerOutbound =
@@ -21,6 +24,9 @@ export type WorkerOutbound =
     | { id: string; type: 'blake3_result'; hex: string }
     | { id: string; type: 'sign_result'; signature: string; publicKey: string }
     | { id: string; type: 'verify_result'; valid: boolean }
+    | { id: string; type: 'db_save_result'; ok: boolean }
+    | { id: string; type: 'db_load_result'; value: string | null }
+    | { id: string; type: 'db_delete_result'; ok: boolean }
     | { id: string; type: 'error'; error: string }
     | { id: string; type: 'log'; message: string };
 
@@ -40,7 +46,21 @@ export interface PyodideInterface {
     unpackArchive(buffer: ArrayBuffer, format: string, options?: { extractDir?: string }): void;
 }
 
-// ── Native command (Swift → JS via evaluateJavaScript) ───────────────────────
+// ── Bridge adapter (platform-specific transport for JS → native messages) ────
+/**
+ * Abstraction over the native bridge transport.
+ *
+ * - **iOS:** Uses `window.webkit.messageHandlers` (WKWebView).
+ * - **Android:** Uses `window.AndroidBridge.postMessage()` (addJavascriptInterface).
+ * - **Test/fallback:** No-op (messages are silently dropped).
+ *
+ * Injected at boot time via `initBridge()` in main.ts.
+ */
+export interface BridgeAdapter {
+    postMessage(payload: BridgeEnvelope): void;
+}
+
+// ── Native command (Swift/Android → JS via evaluateJavaScript) ───────────────
 export interface NativeCommand {
     id: string;
     type: string;

@@ -4,12 +4,13 @@
 //
 // Reads bridge-contract.json and generates:
 //   1. src/bridge-contract.ts     — TypeScript string constants
-//   2. ../../ios-wrapper/xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift
+//   2. xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift — Swift constants
+//   3. generated/BridgeContract.kt — Kotlin constants (for Fort-android)
 //
 // Run: node tools/gen-bridge-contract.mjs
 // CI:  node tools/gen-bridge-contract.mjs --check  (exits 1 if generated files are stale)
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +20,7 @@ const ROOT = resolve(__dirname, '..');
 const contractPath = resolve(ROOT, 'bridge-contract.json');
 const tsOutPath = resolve(ROOT, 'src', 'bridge-contract.ts');
 const swiftOutPath = resolve(ROOT, 'xcodeproj', 'KeriWallet', 'KeriWallet', 'BridgeContract.swift');
+const kotlinOutPath = resolve(ROOT, 'generated', 'BridgeContract.kt');
 
 const contract = JSON.parse(readFileSync(contractPath, 'utf-8'));
 
@@ -31,7 +33,10 @@ function toCamelCase(s) {
 function toScreamingSnake(s) {
     return s.toUpperCase();
 }
-
+// ── Helper: snake_case → PascalCase ─────────────────────────────────────────
+function toPascalCase(s) {
+    return s.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+}
 // ── Generate TypeScript ─────────────────────────────────────────────────────
 function generateTypeScript() {
     const lines = [
@@ -139,10 +144,73 @@ function generateSwift() {
     return lines.join('\n');
 }
 
+// ── Generate Kotlin ─────────────────────────────────────────────────────────
+function generateKotlin() {
+    const lines = [
+        '// ── AUTO-GENERATED — do not edit manually ──────────────────────────────────',
+        '// Source: bridge-contract.json',
+        '// Regenerate: node tools/gen-bridge-contract.mjs',
+        '//',
+        '// This file provides the cross-language bridge constants for Android.',
+        '// Values here must match the TypeScript side (src/bridge-contract.ts) exactly.',
+        '',
+        'package org.kerifoundation.fort.bridge',
+        '',
+        '/**',
+        ' * Cross-language bridge constants generated from `bridge-contract.json`.',
+        ' * Use these instead of hardcoded string literals when referring to bridge',
+        ' * handler names or message type discriminants.',
+        ' */',
+        'object BridgeContract {',
+        '',
+        '    // ── Bridge Handler ──────────────────────────────────────────────────────',
+        '',
+        `    /** addJavascriptInterface name — must match JS: \`window.AndroidBridge\`. */`,
+        `    const val HANDLER_NAME = ${JSON.stringify(contract.bridge.handlerName)}`,
+        '',
+        '    // ── Bridge Message Types (JS → Android) ─────────────────────────────────',
+        '',
+    ];
+
+    for (const t of contract.bridgeMessageTypes) {
+        lines.push(`    const val BRIDGE_${toScreamingSnake(t)} = ${JSON.stringify(t)}`);
+    }
+
+    lines.push('', '    val ALL_BRIDGE_MESSAGE_TYPES = listOf(');
+    for (const t of contract.bridgeMessageTypes) {
+        lines.push(`        BRIDGE_${toScreamingSnake(t)},`);
+    }
+    lines.push('    )', '');
+
+    lines.push('    // ── Worker Command Types (main → worker) ─────────────────────────────', '');
+    for (const t of contract.workerCommandTypes) {
+        lines.push(`    const val WORKER_CMD_${toScreamingSnake(t)} = ${JSON.stringify(t)}`);
+    }
+
+    lines.push('', '    val ALL_WORKER_COMMAND_TYPES = listOf(');
+    for (const t of contract.workerCommandTypes) {
+        lines.push(`        WORKER_CMD_${toScreamingSnake(t)},`);
+    }
+    lines.push('    )', '');
+
+    lines.push('    // ── Worker Result Types (worker → main) ──────────────────────────────', '');
+    for (const t of contract.workerResultTypes) {
+        lines.push(`    const val WORKER_RES_${toScreamingSnake(t)} = ${JSON.stringify(t)}`);
+    }
+
+    lines.push('', '    val ALL_WORKER_RESULT_TYPES = listOf(');
+    for (const t of contract.workerResultTypes) {
+        lines.push(`        WORKER_RES_${toScreamingSnake(t)},`);
+    }
+    lines.push('    )', '}', '');
+
+    return lines.join('\n');
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 const tsContent = generateTypeScript();
 const swiftContent = generateSwift();
-
+const kotlinContent = generateKotlin();
 const isCheck = process.argv.includes('--check');
 
 if (isCheck) {
@@ -154,6 +222,10 @@ if (isCheck) {
     }
     if (!existsSync(swiftOutPath) || readFileSync(swiftOutPath, 'utf-8') !== swiftContent) {
         console.error(`STALE: ${swiftOutPath}`);
+        stale = true;
+    }
+    if (!existsSync(kotlinOutPath) || readFileSync(kotlinOutPath, 'utf-8') !== kotlinContent) {
+        console.error(`STALE: ${kotlinOutPath}`);
         stale = true;
     }
 
@@ -171,3 +243,7 @@ console.log(`wrote ${tsOutPath}`);
 
 writeFileSync(swiftOutPath, swiftContent, 'utf-8');
 console.log(`wrote ${swiftOutPath}`);
+
+mkdirSync(dirname(kotlinOutPath), { recursive: true });
+writeFileSync(kotlinOutPath, kotlinContent, 'utf-8');
+console.log(`wrote ${kotlinOutPath}`);

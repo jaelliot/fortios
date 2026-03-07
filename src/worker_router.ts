@@ -14,6 +14,77 @@
 //
 
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
+import { IDB_DATABASE_NAME, IDB_DEFAULT_STORE } from './constants';
+
+// ── Key-Value store abstraction (pure JS IndexedDB) ──────────────────────────
+//
+// Pyodide's create_proxy callbacks don't fire in WKWebView blob: Workers,
+// so all persistence goes through plain JS IndexedDB APIs instead.
+
+/** Minimal async key-value interface — implemented by IdbKV, mockable in tests. */
+export interface WorkerKV {
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string): Promise<void>;
+    del(key: string): Promise<boolean>;
+}
+
+/**
+ * Open an IndexedDB-backed KV store.
+ *
+ * Uses a single object store (`storeName`) inside the database `dbName`.
+ * Keys are strings, values are strings.  All operations are single-request
+ * transactions — no batching needed for the wallet's access pattern.
+ */
+export async function openIdbKV(
+    dbName: string = IDB_DATABASE_NAME,
+    storeName: string = IDB_DEFAULT_STORE,
+): Promise<WorkerKV> {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = self.indexedDB.open(dbName, 1);
+        req.onupgradeneeded = () => {
+            const d = req.result;
+            if (!d.objectStoreNames.contains(storeName)) {
+                d.createObjectStore(storeName);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(new Error(`IDB open failed: ${req.error?.message}`));
+    });
+
+    return {
+        async get(key: string): Promise<string | null> {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readonly');
+                const req = tx.objectStore(storeName).get(key);
+                req.onsuccess = () => resolve(req.result !== undefined ? String(req.result) : null);
+                req.onerror = () => reject(new Error(`IDB get failed: ${req.error?.message}`));
+            });
+        },
+        async set(key: string, value: string): Promise<void> {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readwrite');
+                const req = tx.objectStore(storeName).put(value, key);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(new Error(`IDB set failed: ${req.error?.message}`));
+            });
+        },
+        async del(key: string): Promise<boolean> {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                // Check existence first, then delete
+                const getReq = store.get(key);
+                getReq.onsuccess = () => {
+                    const existed = getReq.result !== undefined;
+                    const delReq = store.delete(key);
+                    delReq.onsuccess = () => resolve(existed);
+                    delReq.onerror = () => reject(new Error(`IDB del failed: ${delReq.error?.message}`));
+                };
+                getReq.onerror = () => reject(new Error(`IDB del/get failed: ${getReq.error?.message}`));
+            });
+        },
+    };
+}
 
 // ── Per-command handlers ─────────────────────────────────────────────────────
 
@@ -69,6 +140,41 @@ _vresult
     return { id, type: 'verify_result', valid };
 }
 
+// ── IndexedDB handlers (pure JS — no Pyodide) ───────────────────────────────
+
+const IDB_UNAVAILABLE = 'IndexedDB not available (ephemeral mode)';
+
+export async function handleDbSave(
+    id: string,
+    key: string,
+    value: string,
+    kv: WorkerKV | null,
+): Promise<WorkerOutbound> {
+    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    await kv.set(key, value);
+    return { id, type: 'db_save_result', ok: true };
+}
+
+export async function handleDbLoad(
+    id: string,
+    key: string,
+    kv: WorkerKV | null,
+): Promise<WorkerOutbound> {
+    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    const value = await kv.get(key);
+    return { id, type: 'db_load_result', value };
+}
+
+export async function handleDbDelete(
+    id: string,
+    key: string,
+    kv: WorkerKV | null,
+): Promise<WorkerOutbound> {
+    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    const ok = await kv.del(key);
+    return { id, type: 'db_delete_result', ok };
+}
+
 // ── Message dispatch ─────────────────────────────────────────────────────────
 
 /**
@@ -78,6 +184,8 @@ _vresult
  * or `false` when the worker is not yet initialised produces an `error` result
  * rather than throwing, so `self.onmessage` never rejects.
  *
+ * `kv` is the pure-JS IndexedDB key-value store (or `null` in ephemeral mode).
+ *
  * The `init` command is intentionally NOT handled here — it belongs to the
  * boot lifecycle in `pyodide_worker.ts`.
  */
@@ -85,6 +193,7 @@ export async function routeMessage(
     cmd: Exclude<WorkerInbound, { type: 'init' }>,
     pyodide: PyodideInterface | null,
     booted: boolean,
+    kv: WorkerKV | null = null,
 ): Promise<WorkerOutbound> {
     if (!booted || pyodide === null) {
         return { id: cmd.id, type: 'error', error: 'worker not initialized' };
@@ -97,6 +206,12 @@ export async function routeMessage(
             return handleSign(cmd.id, cmd.message, pyodide);
         case 'verify':
             return handleVerify(cmd.id, cmd.message, cmd.signature, cmd.publicKey, pyodide);
+        case 'db_save':
+            return handleDbSave(cmd.id, cmd.key, cmd.value, kv);
+        case 'db_load':
+            return handleDbLoad(cmd.id, cmd.key, kv);
+        case 'db_delete':
+            return handleDbDelete(cmd.id, cmd.key, kv);
         default: {
             const exhaustive: never = cmd;
             return {

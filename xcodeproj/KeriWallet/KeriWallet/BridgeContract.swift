@@ -39,12 +39,18 @@ enum BridgeContract {
     static let workerCmdBlake3Hash = "blake3_hash"
     static let workerCmdSign = "sign"
     static let workerCmdVerify = "verify"
+    static let workerCmdDbSave = "db_save"
+    static let workerCmdDbLoad = "db_load"
+    static let workerCmdDbDelete = "db_delete"
 
     static let allWorkerCommandTypes: [String] = [
         workerCmdInit,
         workerCmdBlake3Hash,
         workerCmdSign,
         workerCmdVerify,
+        workerCmdDbSave,
+        workerCmdDbLoad,
+        workerCmdDbDelete,
     ]
 
     // MARK: - Worker Result Types (worker → main)
@@ -53,6 +59,9 @@ enum BridgeContract {
     static let workerResBlake3Result = "blake3_result"
     static let workerResSignResult = "sign_result"
     static let workerResVerifyResult = "verify_result"
+    static let workerResDbSaveResult = "db_save_result"
+    static let workerResDbLoadResult = "db_load_result"
+    static let workerResDbDeleteResult = "db_delete_result"
     static let workerResError = "error"
     static let workerResLog = "log"
 
@@ -61,6 +70,9 @@ enum BridgeContract {
         workerResBlake3Result,
         workerResSignResult,
         workerResVerifyResult,
+        workerResDbSaveResult,
+        workerResDbLoadResult,
+        workerResDbDeleteResult,
         workerResError,
         workerResLog,
     ]

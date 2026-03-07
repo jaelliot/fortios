@@ -223,7 +223,7 @@
       white-space: pre-wrap;
       word-break: break-word;
       overflow-y: auto;
-      max-height: 55vh;
+      max-height: 30vh;
       -webkit-overflow-scrolling: touch;
       contain: layout paint;
     }
@@ -232,6 +232,143 @@
       #output {
         background-color: rgba(0, 0, 0, 0.03);
         border-color: rgba(0, 0, 0, 0.06);
+      }
+    }
+
+    /* ─── Profile form (IndexedDB persistence demo) ──────────────────── */
+    .profile-section {
+      margin-top: var(--space-lg);
+      padding-top: var(--space-md);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .profile-section {
+        border-top-color: rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    .field-group {
+      margin-bottom: var(--space-sm);
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted-dark);
+      margin-bottom: 4px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      .field-group label {
+        color: var(--text-muted-light);
+      }
+    }
+
+    .field-group input,
+    .field-group textarea {
+      width: 100%;
+      padding: var(--space-xs) var(--space-sm);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background-color: rgba(255, 255, 255, 0.06);
+      color: var(--text-dark);
+      font-family: inherit;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .field-group input:focus,
+    .field-group textarea:focus {
+      border-color: var(--keri-gold);
+    }
+
+    @media (prefers-color-scheme: light) {
+
+      .field-group input,
+      .field-group textarea {
+        border-color: rgba(0, 0, 0, 0.12);
+        background-color: rgba(0, 0, 0, 0.03);
+        color: var(--text-light);
+      }
+    }
+
+    .field-group textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: var(--space-sm);
+      align-items: center;
+      margin-top: var(--space-md);
+    }
+
+    .btn {
+      padding: var(--space-xs) var(--space-lg);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background-color: rgba(255, 255, 255, 0.08);
+      color: var(--text-dark);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
+
+    .btn:active {
+      background-color: rgba(255, 255, 255, 0.15);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .btn {
+        border-color: rgba(0, 0, 0, 0.15);
+        background-color: rgba(0, 0, 0, 0.04);
+        color: var(--text-light);
+      }
+
+      .btn:active {
+        background-color: rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    #db-status {
+      font-size: 13px;
+      color: var(--text-muted-dark);
+    }
+
+    @media (prefers-color-scheme: light) {
+      #db-status {
+        color: var(--text-muted-light);
+      }
+    }
+
+    /* ─── Record JSON display ────────────────────────────────────────── */
+    #record-json {
+      margin-top: var(--space-sm);
+      padding: var(--space-sm);
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 80px;
+      color: var(--text-muted-dark);
+    }
+
+    @media (prefers-color-scheme: light) {
+      #record-json {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-color: rgba(0, 0, 0, 0.06);
+        color: var(--text-muted-light);
       }
     }
   </style>
@@ -255,6 +392,28 @@
       <span id="status">booting</span>
     </div>
     <pre id="output"></pre>
+
+    <!-- Profile persistence demo (IndexedDB via Pyodide worker) -->
+    <div class="profile-section">
+      <div class="field-group">
+        <label for="profile-id">Profile ID</label>
+        <input type="text" id="profile-id" placeholder="e.g. jay-1" autocomplete="off" autocorrect="off" />
+      </div>
+      <div class="field-group">
+        <label for="profile-name">Name</label>
+        <input type="text" id="profile-name" placeholder="Display name" autocomplete="off" autocorrect="off" />
+      </div>
+      <div class="field-group">
+        <label for="profile-note">Note</label>
+        <textarea id="profile-note" placeholder="Optional note..." rows="3"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-save">Save</button>
+        <button class="btn" id="btn-load">Load</button>
+        <span id="db-status"></span>
+      </div>
+      <pre id="record-json">No record loaded.</pre>
+    </div>
   </div>
 </body>
 
