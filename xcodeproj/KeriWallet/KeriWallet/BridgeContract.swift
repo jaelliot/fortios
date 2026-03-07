@@ -12,10 +12,30 @@ import Foundation
 /// handler names or message type discriminants.
 enum BridgeContract {
 
+    // MARK: - Contract Version
+
+    static let version = "1.0"
+
     // MARK: - Bridge Handler
 
     /// WKScriptMessageHandler name — must match JS: `webkit.messageHandlers.bridge`.
     static let handlerName = "bridge"
+
+    // MARK: - Lifecycle States
+
+    static let lifecycleBoot = "boot"
+    static let lifecyclePyodideLoading = "pyodide_loading"
+    static let lifecycleCryptoReady = "crypto_ready"
+    static let lifecycleReady = "ready"
+    static let lifecycleError = "error"
+
+    static let allLifecycleStates: [String] = [
+        lifecycleBoot,
+        lifecyclePyodideLoading,
+        lifecycleCryptoReady,
+        lifecycleReady,
+        lifecycleError,
+    ]
 
     // MARK: - Bridge Message Types (JS → Swift)
 

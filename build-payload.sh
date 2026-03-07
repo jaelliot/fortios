@@ -109,6 +109,25 @@ if [[ -d "${HIO_SRC_DIR}" ]]; then
   cp -R "${HIO_SRC_DIR}" "${PAYLOAD_DIST_DIR}/python/hio"
   HIO_COUNT=$(find "${PAYLOAD_DIST_DIR}/python/hio" -name '*.py' | wc -l | tr -d ' ')
   echo "[build-payload] hio subset → dist/python/hio/ (${HIO_COUNT} files)"
+
+  # Generate hio-manifest.json — single source of truth for the worker's boot install.
+  # Lists every .py file as a path relative to the hio/ directory.
+  HIO_MANIFEST="${PAYLOAD_DIST_DIR}/python/hio-manifest.json"
+  python3 - "${PAYLOAD_DIST_DIR}/python/hio" "${HIO_MANIFEST}" <<'PY'
+import json, os, sys
+
+hio_dir, out_path = sys.argv[1], sys.argv[2]
+files = sorted(
+    os.path.relpath(os.path.join(root, f), hio_dir)
+    for root, _, filenames in os.walk(hio_dir)
+    for f in filenames
+    if f.endswith(".py")
+)
+dirs = sorted({os.path.dirname(f) for f in files if os.path.dirname(f)})
+with open(out_path, "w", encoding="utf-8") as fp:
+    json.dump({"dirs": dirs, "files": files}, fp, indent=2)
+PY
+  echo "[build-payload] hio-manifest.json written (${HIO_COUNT} files)"
 else
   echo "warning: hio subset not found at ${HIO_SRC_DIR} — skipping" 1>&2
 fi

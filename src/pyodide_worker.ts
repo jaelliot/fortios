@@ -87,36 +87,28 @@ async function boot(origin: string): Promise<void> {
     ]);
 
     // Install hio subset (required for keripy imports: doing, decking, ogling, etc.)
+    // The file list is driven by hio-manifest.json — generated at build time by
+    // build-payload.sh so the build script is the single source of truth.
     workerLog('installing hio subset');
     const hioBase = `${pythonBase}hio/`;
     const hioRoot = '/home/pyodide/hio';
-    const hioDirs = ['', '/base', '/core', '/core/http', '/help'];
-    for (const dir of hioDirs) {
-        (pyodide as any).FS.mkdirTree(`${hioRoot}${dir}`);
+
+    const manifestResp = await fetch(`${pythonBase}hio-manifest.json`);
+    if (!manifestResp.ok) throw new Error(`hio-manifest.json fetch failed (${manifestResp.status})`);
+    const manifest: { dirs: string[]; files: string[] } = await manifestResp.json();
+
+    // Create directory tree first (manifest dirs are relative to hio/).
+    (pyodide as any).FS.mkdirTree(hioRoot);
+    for (const dir of manifest.dirs) {
+        (pyodide as any).FS.mkdirTree(`${hioRoot}/${dir}`);
     }
-    const hioFiles: [string, string][] = [
-        ['__init__.py', '__init__.py'],
-        ['hioing.py', 'hioing.py'],
-        ['base/__init__.py', 'base/__init__.py'],
-        ['base/basing.py', 'base/basing.py'],
-        ['base/doing.py', 'base/doing.py'],
-        ['base/tyming.py', 'base/tyming.py'],
-        ['core/__init__.py', 'core/__init__.py'],
-        ['core/http/__init__.py', 'core/http/__init__.py'],
-        ['core/http/httping.py', 'core/http/httping.py'],
-        ['help/__init__.py', 'help/__init__.py'],
-        ['help/decking.py', 'help/decking.py'],
-        ['help/helping.py', 'help/helping.py'],
-        ['help/hicting.py', 'help/hicting.py'],
-        ['help/ogling.py', 'help/ogling.py'],
-        ['help/timing.py', 'help/timing.py'],
-    ];
+
     await Promise.all(
-        hioFiles.map(([src, dest]) =>
-            installPythonFile(`${hioBase}${src}`, `${hioRoot}/${dest}`),
+        manifest.files.map((relPath) =>
+            installPythonFile(`${hioBase}${relPath}`, `${hioRoot}/${relPath}`),
         ),
     );
-    workerLog(`hio subset installed (${hioFiles.length} files)`);
+    workerLog(`hio subset installed (${manifest.files.length} files)`);
 
     // NOTE: micropip is intentionally NOT loaded here.
     // The bundled app runs under `app://` with no network access to PyPI.

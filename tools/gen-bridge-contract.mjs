@@ -44,11 +44,28 @@ function generateTypeScript() {
         '// Source: bridge-contract.json',
         '// Regenerate: node tools/gen-bridge-contract.mjs',
         '',
+        '// ── Contract version ────────────────────────────────────────────────────────',
+        `export const BRIDGE_CONTRACT_VERSION = ${JSON.stringify(contract.version)} as const;`,
+        '',
         '// ── Bridge handler ──────────────────────────────────────────────────────────',
         `export const BRIDGE_HANDLER_NAME = ${JSON.stringify(contract.bridge.handlerName)} as const;`,
         '',
-        '// ── Bridge message types (JS → Swift) ──────────────────────────────────────',
     ];
+
+    // Lifecycle states
+    if (contract.lifecycleStates) {
+        lines.push('// ── Lifecycle states ────────────────────────────────────────────────────────');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`export const LIFECYCLE_${toScreamingSnake(s)} = ${JSON.stringify(s)} as const;`);
+        }
+        lines.push('', 'export const LIFECYCLE_STATES = [');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`    LIFECYCLE_${toScreamingSnake(s)},`);
+        }
+        lines.push('] as const;', '');
+    }
+
+    lines.push('// ── Bridge message types (JS → Swift) ──────────────────────────────────────');
 
     for (const t of contract.bridgeMessageTypes) {
         lines.push(`export const BRIDGE_${toScreamingSnake(t)} = ${JSON.stringify(t)} as const;`);
@@ -100,14 +117,31 @@ function generateSwift() {
         '/// handler names or message type discriminants.',
         'enum BridgeContract {',
         '',
+        '    // MARK: - Contract Version',
+        '',
+        `    static let version = ${JSON.stringify(contract.version)}`,
+        '',
         '    // MARK: - Bridge Handler',
         '',
         `    /// WKScriptMessageHandler name — must match JS: \`webkit.messageHandlers.${contract.bridge.handlerName}\`.`,
         `    static let handlerName = ${JSON.stringify(contract.bridge.handlerName)}`,
         '',
-        '    // MARK: - Bridge Message Types (JS → Swift)',
-        '',
     ];
+
+    // Lifecycle states
+    if (contract.lifecycleStates) {
+        lines.push('    // MARK: - Lifecycle States', '');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`    static let lifecycle${toPascalCase(s)} = ${JSON.stringify(s)}`);
+        }
+        lines.push('', '    static let allLifecycleStates: [String] = [');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`        lifecycle${toPascalCase(s)},`);
+        }
+        lines.push('    ]', '');
+    }
+
+    lines.push('    // MARK: - Bridge Message Types (JS → Swift)', '');
 
     for (const t of contract.bridgeMessageTypes) {
         lines.push(`    static let bridge${toCamelCase(t).charAt(0).toUpperCase() + toCamelCase(t).slice(1)} = ${JSON.stringify(t)}`);
@@ -163,14 +197,31 @@ function generateKotlin() {
         ' */',
         'object BridgeContract {',
         '',
+        '    // ── Contract Version ────────────────────────────────────────────────────',
+        '',
+        `    const val VERSION = ${JSON.stringify(contract.version)}`,
+        '',
         '    // ── Bridge Handler ──────────────────────────────────────────────────────',
         '',
         `    /** addJavascriptInterface name — must match JS: \`window.AndroidBridge\`. */`,
         `    const val HANDLER_NAME = ${JSON.stringify(contract.bridge.handlerName)}`,
         '',
-        '    // ── Bridge Message Types (JS → Android) ─────────────────────────────────',
-        '',
     ];
+
+    // Lifecycle states
+    if (contract.lifecycleStates) {
+        lines.push('    // ── Lifecycle States ──────────────────────────────────────────────────', '');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`    const val LIFECYCLE_${toScreamingSnake(s)} = ${JSON.stringify(s)}`);
+        }
+        lines.push('', '    val ALL_LIFECYCLE_STATES = listOf(');
+        for (const s of contract.lifecycleStates) {
+            lines.push(`        LIFECYCLE_${toScreamingSnake(s)},`);
+        }
+        lines.push('    )', '');
+    }
+
+    lines.push('    // ── Bridge Message Types (JS → Android) ─────────────────────────────────', '');
 
     for (const t of contract.bridgeMessageTypes) {
         lines.push(`    const val BRIDGE_${toScreamingSnake(t)} = ${JSON.stringify(t)}`);

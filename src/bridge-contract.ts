@@ -2,8 +2,26 @@
 // Source: bridge-contract.json
 // Regenerate: node tools/gen-bridge-contract.mjs
 
+// ── Contract version ────────────────────────────────────────────────────────
+export const BRIDGE_CONTRACT_VERSION = "1.0" as const;
+
 // ── Bridge handler ──────────────────────────────────────────────────────────
 export const BRIDGE_HANDLER_NAME = "bridge" as const;
+
+// ── Lifecycle states ────────────────────────────────────────────────────────
+export const LIFECYCLE_BOOT = "boot" as const;
+export const LIFECYCLE_PYODIDE_LOADING = "pyodide_loading" as const;
+export const LIFECYCLE_CRYPTO_READY = "crypto_ready" as const;
+export const LIFECYCLE_READY = "ready" as const;
+export const LIFECYCLE_ERROR = "error" as const;
+
+export const LIFECYCLE_STATES = [
+    LIFECYCLE_BOOT,
+    LIFECYCLE_PYODIDE_LOADING,
+    LIFECYCLE_CRYPTO_READY,
+    LIFECYCLE_READY,
+    LIFECYCLE_ERROR,
+] as const;
 
 // ── Bridge message types (JS → Swift) ──────────────────────────────────────
 export const BRIDGE_JS_ERROR = "js_error" as const;

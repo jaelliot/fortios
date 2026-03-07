@@ -14,10 +14,30 @@ package org.kerifoundation.fort.bridge
  */
 object BridgeContract {
 
+    // ── Contract Version ────────────────────────────────────────────────────
+
+    const val VERSION = "1.0"
+
     // ── Bridge Handler ──────────────────────────────────────────────────────
 
     /** addJavascriptInterface name — must match JS: `window.AndroidBridge`. */
     const val HANDLER_NAME = "bridge"
+
+    // ── Lifecycle States ──────────────────────────────────────────────────
+
+    const val LIFECYCLE_BOOT = "boot"
+    const val LIFECYCLE_PYODIDE_LOADING = "pyodide_loading"
+    const val LIFECYCLE_CRYPTO_READY = "crypto_ready"
+    const val LIFECYCLE_READY = "ready"
+    const val LIFECYCLE_ERROR = "error"
+
+    val ALL_LIFECYCLE_STATES = listOf(
+        LIFECYCLE_BOOT,
+        LIFECYCLE_PYODIDE_LOADING,
+        LIFECYCLE_CRYPTO_READY,
+        LIFECYCLE_READY,
+        LIFECYCLE_ERROR,
+    )
 
     // ── Bridge Message Types (JS → Android) ─────────────────────────────────
 
