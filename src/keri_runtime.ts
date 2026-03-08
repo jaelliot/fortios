@@ -110,6 +110,19 @@ export async function initPyodide(): Promise<void> {
     if (result.type === 'error') {
         throw new Error(`Pyodide boot failed: ${result.error}`);
     }
+
+    // Forward app visibility changes to the worker so it can close/reopen
+    // IndexedDB proactively.  WebKit kills the networking process on background,
+    // permanently corrupting any held IDBDatabase reference.
+    // visibilitychange fires on `document` in the main thread only — not in
+    // Web Workers — so we must relay it via postMessage.
+    document.addEventListener('visibilitychange', () => {
+        worker?.postMessage({
+            id: generateId(),
+            type: 'visibility_change',
+            hidden: document.hidden,
+        } satisfies WorkerInbound);
+    });
 }
 
 // ── Native command handler (called by Swift via evaluateJavaScript) ───────────

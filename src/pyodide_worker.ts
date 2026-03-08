@@ -152,6 +152,24 @@ _sk_bytes = _kp[1]
 
 self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
     const cmd = ev.data;
+
+    // Fire-and-forget lifecycle event — no response.
+    if (cmd.type === 'visibility_change') {
+        if (cmd.hidden) {
+            kv?.close();
+            kv = null;
+            workerLog('visibility: hidden — closed IndexedDB');
+        } else if (!kv) {
+            try {
+                kv = await openIdbKV();
+                workerLog('visibility: visible — reopened IndexedDB');
+            } catch (e) {
+                workerLog(`visibility: reopen failed — ephemeral mode: ${e}`);
+            }
+        }
+        return;
+    }
+
     let out: WorkerOutbound;
     try {
         if (cmd.type === 'init') {

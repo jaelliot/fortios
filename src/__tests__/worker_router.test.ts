@@ -33,6 +33,7 @@ function makeMockKV(store: Record<string, string> = {}): WorkerKV {
             delete store[key];
             return existed;
         }),
+        close: vi.fn(),
     };
 }
 
@@ -470,5 +471,22 @@ describe('IndexedDB save → load → delete round-trip', () => {
             kv,
         );
         expect(loadRes).toHaveProperty('value', 'v2');
+    });
+});
+
+// ── WorkerKV.close() ─────────────────────────────────────────────────────────
+
+describe('WorkerKV.close()', () => {
+    it('is callable without side effects on the mock', () => {
+        const kv = makeMockKV({ k: 'v' });
+        expect(() => kv.close()).not.toThrow();
+        expect(kv.close).toHaveBeenCalledOnce();
+    });
+
+    it('does not prevent subsequent operations on mock KV', async () => {
+        const kv = makeMockKV({ k: 'v' });
+        kv.close();
+        const value = await kv.get('k');
+        expect(value).toBe('v');
     });
 });

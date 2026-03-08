@@ -16,7 +16,8 @@ export type WorkerInbound =
     | { id: string; type: 'verify'; message: string; signature: string; publicKey: string }
     | { id: string; type: 'db_save'; key: string; value: string }
     | { id: string; type: 'db_load'; key: string }
-    | { id: string; type: 'db_delete'; key: string };
+    | { id: string; type: 'db_delete'; key: string }
+    | { id: string; type: 'visibility_change'; hidden: boolean };
 
 // ── Worker outbound (worker → main) ──────────────────────────────────────────
 export type WorkerOutbound =

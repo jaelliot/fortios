@@ -125,7 +125,7 @@ export async function handleDbDelete(
  * boot lifecycle in `pyodide_worker.ts`.
  */
 export async function routeMessage(
-    cmd: Exclude<WorkerInbound, { type: 'init' }>,
+    cmd: Exclude<WorkerInbound, { type: 'init' | 'visibility_change' }>,
     pyodide: PyodideInterface | null,
     booted: boolean,
     kv: WorkerKV | null = null,
