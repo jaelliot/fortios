@@ -64,16 +64,9 @@ export async function openIdbKV(
         async del(key: string): Promise<boolean> {
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(storeName, 'readwrite');
-                const store = tx.objectStore(storeName);
-                // Check existence first, then delete
-                const getReq = store.get(key);
-                getReq.onsuccess = () => {
-                    const existed = getReq.result !== undefined;
-                    const delReq = store.delete(key);
-                    delReq.onsuccess = () => resolve(existed);
-                    delReq.onerror = () => reject(new Error(`IDB del failed: ${delReq.error?.message}`));
-                };
-                getReq.onerror = () => reject(new Error(`IDB del/get failed: ${getReq.error?.message}`));
+                const req = tx.objectStore(storeName).delete(key);
+                req.onsuccess = () => resolve(true);
+                req.onerror = () => reject(new Error(`IDB del failed: ${req.error?.message}`));
             });
         },
     };

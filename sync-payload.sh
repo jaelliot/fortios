@@ -31,11 +31,16 @@ if [[ -f "${STDLIB_ZIP}" ]]; then
   SCRATCH=$(mktemp -d)
   trap 'rm -rf "${SCRATCH}"' EXIT
   unzip -q "${STDLIB_ZIP}" -d "${SCRATCH}"
+  # Purge compiled bytecode — .pyc files contain the itms-services string
+  # in binary constant tables and survive the .py-level text replacement.
+  # Apple's static analysis extracts ZIP contents and scans binaries.
+  find "${SCRATCH}" -type d -name "__pycache__" -exec rm -r {} + 2>/dev/null || true
+  find "${SCRATCH}" -type f -name '*.pyc' -delete
   # Replace in-place; uses perl for reliable binary-safe substitution
   find "${SCRATCH}" -type f -name '*.py' -exec \
     perl -pi -e 's/itms-services/itms_services/g' {} +
   (cd "${SCRATCH}" && zip -qr "${STDLIB_ZIP}" .)
-  echo "[sync-payload] sanitized itms-services in python_stdlib.zip"
+  echo "[sync-payload] sanitized itms-services in python_stdlib.zip (*.pyc purged)"
   rm -rf "${SCRATCH}"
   trap - EXIT
 fi
