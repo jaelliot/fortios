@@ -134,6 +134,9 @@ Capture and attach these artifacts for each full validation run:
 - Device logs from `make logs-device`.
 - Short pass/fail notes for flows A-E.
 
+Note:
+- In Debug builds, a warning that `handleNativeCommand` is unavailable may appear when the host dispatches a demo crypto command. This warning is expected on payloads that do not expose that debug hook and is not a blocker by itself.
+
 ## 5. Exit Criteria
 
 The iOS conference lane is considered validated only if:

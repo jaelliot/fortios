@@ -125,10 +125,27 @@ final class WebContainerViewController: UIViewController {
                 category: AppConfig.Log.webContainer)
             return
         }
-        webView.evaluateJavaScript("window.handleNativeCommand(\(json))") { _, error in
+        let js = """
+        (function() {
+            if (typeof window.handleNativeCommand !== 'function') {
+                return '__bridge_missing__';
+            }
+            window.handleNativeCommand(\(json));
+            return '__bridge_called__';
+        })();
+        """
+
+        webView.evaluateJavaScript(js) { result, error in
             if let error = error {
                 AppLogger.error(
                     "[WebContainer] evaluateJavaScript error: \(error)",
+                    category: AppConfig.Log.webContainer)
+                return
+            }
+
+            if let marker = result as? String, marker == "__bridge_missing__" {
+                AppLogger.warning(
+                    "[WebContainer] handleNativeCommand not available; skipping debug crypto dispatch",
                     category: AppConfig.Log.webContainer)
             }
         }
