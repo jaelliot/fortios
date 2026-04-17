@@ -108,6 +108,8 @@ make logs-device DEVICE_REF=<udid-or-name>
 
 Use `PAYLOAD_SOURCE=fortweb` with the wrapper targets when you want to stage the FortWeb-owned payload in the iOS host, for example `PAYLOAD_SOURCE=fortweb make dev-sim`.
 
+For conference acceptance and simulator/device parity runs, use [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](CONFERENCE-IOS-VALIDATION-CHECKLIST.md).
+
 Run `make help` at any time to list all available targets.
 
 ---
@@ -362,6 +364,12 @@ Fort-ios/
 | [pyodide-event-loop.instructions.md](docs/instructions/pyodide-event-loop.instructions.md) | Asyncio event loop inside Pyodide WASM |
 | [pyodide-js-bridge.instructions.md](docs/instructions/pyodide-js-bridge.instructions.md) | Python↔JavaScript data passing via Pyodide proxy objects |
 | [pyodide-wasm-wheel-packaging.instructions.md](docs/instructions/pyodide-wasm-wheel-packaging.instructions.md) | Building WASM-compatible wheels (blake3, pychloride) |
+
+### Conference validation
+
+| File | Purpose |
+|------|---------|
+| [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](CONFERENCE-IOS-VALIDATION-CHECKLIST.md) | End-to-end simulator and physical-device validation script for conference acceptance |
 
 ---
 
