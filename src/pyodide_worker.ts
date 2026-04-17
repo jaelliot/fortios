@@ -9,8 +9,8 @@
 
 import { BLAKE3_WHEEL, PYCHLORIDE_WHEEL, WORKER_LOG_ID } from './constants';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
-import type { WorkerKV } from './worker_router';
-import { openIdbKV, routeMessage } from './worker_router';
+import type { KVFactory } from './worker_router';
+import { openIdbKVFactory, routeMessage } from './worker_router';
 
 // loadPyodide is injected into the worker scope at runtime via importScripts.
 declare function loadPyodide(opts: { indexURL: string }): Promise<PyodideInterface>;
@@ -21,7 +21,7 @@ let pyodideBase = '';
 let wheelBase = '';
 let pythonBase = '';
 let pyodide: PyodideInterface | null = null;
-let kv: WorkerKV | null = null;
+let kvFactory: KVFactory | null = null;
 let booted = false;
 
 /** Fire-and-forget log message back to main thread (forwarded to bridge). */
@@ -119,14 +119,14 @@ async function boot(origin: string): Promise<void> {
     // ── Persistence: pure-JS IndexedDB ──────────────────────────────────
     // Pyodide's create_proxy callbacks don't fire in WKWebView blob: Workers,
     // so Python↔IDB is broken.  Instead we open a plain JS IndexedDB store
-    // and handle db_save / db_load / db_delete entirely in JavaScript.
+    // and handle db_put / db_get / db_del / db_list entirely in JavaScript.
     workerLog('opening JS-level IndexedDB');
     try {
-        kv = await openIdbKV();
+        kvFactory = await openIdbKVFactory();
         workerLog('IndexedDB ready (JS-level persistence)');
     } catch (e) {
         workerLog(`IndexedDB open failed — ephemeral mode: ${e}`);
-        kv = null;
+        kvFactory = null;
     }
 
     // Pre-import crypto modules.
@@ -147,7 +147,7 @@ _sk_bytes = _kp[1]
 `);
 
     booted = true;
-    workerLog(`boot complete — crypto ready, persistence: ${kv ? 'IndexedDB' : 'ephemeral'}`);
+    workerLog(`boot complete — crypto ready, persistence: ${kvFactory ? 'IndexedDB' : 'ephemeral'}`);
 }
 
 self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
@@ -156,12 +156,12 @@ self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
     // Fire-and-forget lifecycle event — no response.
     if (cmd.type === 'visibility_change') {
         if (cmd.hidden) {
-            kv?.close();
-            kv = null;
+            kvFactory?.close();
+            kvFactory = null;
             workerLog('visibility: hidden — closed IndexedDB');
-        } else if (!kv) {
+        } else if (!kvFactory) {
             try {
-                kv = await openIdbKV();
+                kvFactory = await openIdbKVFactory();
                 workerLog('visibility: visible — reopened IndexedDB');
             } catch (e) {
                 workerLog(`visibility: reopen failed — ephemeral mode: ${e}`);
@@ -176,7 +176,7 @@ self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
             await boot(cmd.origin);
             out = { id: cmd.id, type: 'ready' };
         } else {
-            out = await routeMessage(cmd, pyodide, booted, kv);
+            out = await routeMessage(cmd, pyodide, booted, kvFactory);
         }
     } catch (e) {
         out = { id: cmd.id, type: 'error', error: String(e) };

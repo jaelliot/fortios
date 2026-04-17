@@ -9,6 +9,13 @@
 
 The two layers communicate through a typed JS↔Swift bridge (`bridge-contract.json`). The web payload is bundled at build time and served entirely from the app bundle — no network fetches at runtime.
 
+The repo currently supports two payload sources through the same iOS host workflow:
+
+| Payload source | Status | How to stage it |
+|-------|--------|----------------|
+| `fort-ios` | Current local payload default | `make sync` |
+| `fortweb` | Migration lane for shared-payload hosting | `PAYLOAD_SOURCE=fortweb make sync` or `make sync-fortweb` |
+
 ---
 
 ## Table of Contents
@@ -73,27 +80,33 @@ After these three steps the project is ready to build.
 ## 3. Daily workflow
 
 ```sh
-# 1. Edit source (TypeScript in src/, Swift in KeriWallet/)
-# 2. If TypeScript changed, rebuild and sync into the iOS bundle
-make sync
+# 1. Confirm Xcode, Simulator, and payload-source readiness
+make ios-doctor
 
-# 3. Lint everything
-make lint       # SwiftLint (Swift sources)
-make lint-ts    # tsc --noEmit (TypeScript)
+# 2. Stage the payload you want to host in iOS
+make sync                       # default: PAYLOAD_SOURCE=fort-ios
+make sync-fortweb              # convenience alias for PAYLOAD_SOURCE=fortweb
 
-# 4. Run the fast test suites
-make test-ts    # Vitest unit tests  (~100 ms)
-make test-e2e   # Playwright structural tests  (~5 s)
+# 3. Run the fast local checks
+make lint                      # SwiftLint (Swift sources)
+make lint-ts                   # tsc --noEmit (TypeScript)
+make test-ts                   # Vitest unit tests
 
-# 5. Build the iOS app for Simulator
-make build
+# 4. Build and launch on Simulator
+make dev-sim
+make run-sim
 
-# 6. Run Swift tests
-make test-swift
+# 5. Build and launch on physical device
+make dev-device
+make run-device DEVICE_REF=<udid-or-name>
 
-# 7. Open in Xcode and hit ⌘R
-make open
+# 6. Compare both lanes when needed
+make parity-smoke DEVICE_REF=<udid-or-name>
+make logs-sim
+make logs-device DEVICE_REF=<udid-or-name>
 ```
+
+Use `PAYLOAD_SOURCE=fortweb` with the wrapper targets when you want to stage the FortWeb-owned payload in the iOS host, for example `PAYLOAD_SOURCE=fortweb make dev-sim`.
 
 Run `make help` at any time to list all available targets.
 
@@ -106,7 +119,18 @@ Run `make help` at any time to list all available targets.
 | `make help` | List all targets with descriptions |
 | `make setup` | Install Node dependencies (`npm ci`) |
 | `make pyodide` | Download Pyodide v0.29.1 runtime + crypto wheels into `public/pyodide/` |
-| `make sync` | Build web payload (`build:ci`) and copy `dist/` → `WebPayload/` |
+| `make sync` | Sync the selected payload source into `WebPayload/` (`PAYLOAD_SOURCE=fort-ios` by default) |
+| `make sync-fortweb` | Stage the FortWeb payload into `WebPayload/` for iOS hosting tests |
+| `make ios-list-sims` | List available iOS Simulator destinations |
+| `make ios-list-devices` | List CoreDevice-visible physical devices |
+| `make ios-doctor` | Verify Xcode, simulator, and payload-source readiness |
+| `make dev-sim` | Sync payload, run TS checks, and build for Simulator |
+| `make run-sim` | Boot, install, and launch on the configured Simulator |
+| `make dev-device` | Sync payload and build for a generic iOS device output |
+| `make run-device DEVICE_REF=<udid-or-name>` | Install and launch on a physical device |
+| `make parity-smoke DEVICE_REF=<udid-or-name>` | Run the shared payload sequentially on simulator and device |
+| `make logs-sim` | Show recent simulator logs for `KeriWallet` |
+| `make logs-device DEVICE_REF=<udid-or-name>` | Relaunch on device with the console attached |
 | `make build` | `xcodebuild` — build KeriWallet for iOS Simulator (Debug) |
 | `make open` | Open `KeriWallet.xcodeproj` in Xcode |
 | `make lint` | Run SwiftLint with `--strict` on all Swift sources |
@@ -156,14 +180,19 @@ The pipeline is split into two scripts:
 1. Runs `npm ci && npm run build:ci` to produce a deterministic `dist/`.
 2. Verifies `dist/build-manifest.json` exists and has the required fields.
 
-**`sync-payload.sh`** (iOS-specific, invoked by `make sync`) sources `build-payload.sh`, then:
+**`sync-payload.sh`** (iOS-specific, invoked by `make sync`) now supports two modes:
+
+- `PAYLOAD_SOURCE=fort-ios`: sources `build-payload.sh`, then stages the local Fort-ios payload
+- `PAYLOAD_SOURCE=fortweb`: copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, then writes a root redirect page for the iOS host
+
+In the default `fort-ios` mode it then:
 
 3. Sanitises `python_stdlib.zip` — replaces `itms-services` with `itms_services` in `urllib/parse.py` (prevents automated App Store rejection).
 4. Cleans stale files from `WebPayload/`.
 5. Copies `dist/` contents into `WebPayload/`.
 6. Prints a summary (git SHA, file count).
 
-> **Rule:** Always run `make sync` after changing TypeScript source. Never manually edit `WebPayload/`.
+> **Rule:** Always run the appropriate sync target after changing payload source files. Never manually edit `WebPayload/`.
 
 ### Determinism contract
 

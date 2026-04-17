@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PyodideInterface } from '../types';
-import type { WorkerKV } from '../worker_router';
+import type { KVFactory, WorkerKV } from '../worker_router';
 import {
     handleBlake3Hash,
-    handleDbDelete,
-    handleDbLoad,
-    handleDbSave,
+    handleDbDel,
+    handleDbGet,
+    handleDbList,
+    handleDbPut,
     handleSign,
     handleVerify,
     routeMessage,
@@ -33,8 +34,27 @@ function makeMockKV(store: Record<string, string> = {}): WorkerKV {
             delete store[key];
             return existed;
         }),
+        list: vi.fn(async (prefix: string) => Object.entries(store)
+            .filter(([key]) => key.startsWith(prefix))
+            .map(([key, value]) => ({ key, value }))),
         close: vi.fn(),
     };
+}
+
+function makeMockKVFactory(stores: Record<string, Record<string, string>> = {}): KVFactory {
+    const cache = new Map<string, WorkerKV>();
+
+    const factory = ((store: string) => {
+        const existing = cache.get(store);
+        if (existing) return existing;
+
+        const kv = makeMockKV(stores[store] ?? (stores[store] = {}));
+        cache.set(store, kv);
+        return kv;
+    }) as KVFactory;
+
+    factory.close = vi.fn();
+    return factory;
 }
 
 // ── handleBlake3Hash ─────────────────────────────────────────────────────────
@@ -176,119 +196,174 @@ describe('routeMessage', () => {
         expect(result).toHaveProperty('valid', true);
     });
 
-    it('routes db_save → handleDbSave', async () => {
+    it('routes db_put → handleDbPut', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV();
+        const kvFactory = makeMockKVFactory();
         const result = await routeMessage(
-            { id: 'r4', type: 'db_save', key: 'k', value: 'v' },
+            { id: 'r4', type: 'db_put', store: 'profile', key: 'k', value: 'v' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
-        expect(result.type).toBe('db_save_result');
+        expect(result.type).toBe('db_put_result');
         expect(result).toHaveProperty('ok', true);
     });
 
-    it('routes db_load → handleDbLoad', async () => {
+    it('routes db_get → handleDbGet', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV({ k: 'loaded' });
+        const kvFactory = makeMockKVFactory({ profile: { k: 'loaded' } });
         const result = await routeMessage(
-            { id: 'r5', type: 'db_load', key: 'k' },
+            { id: 'r5', type: 'db_get', store: 'profile', key: 'k' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
-        expect(result.type).toBe('db_load_result');
+        expect(result.type).toBe('db_get_result');
         expect(result).toHaveProperty('value', 'loaded');
     });
 
-    it('routes db_delete → handleDbDelete', async () => {
+    it('routes db_del → handleDbDel', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV({ k: 'val' });
+        const kvFactory = makeMockKVFactory({ profile: { k: 'val' } });
         const result = await routeMessage(
-            { id: 'r6', type: 'db_delete', key: 'k' },
+            { id: 'r6', type: 'db_del', store: 'profile', key: 'k' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
-        expect(result.type).toBe('db_delete_result');
+        expect(result.type).toBe('db_del_result');
         expect(result).toHaveProperty('ok', true);
+    });
+
+    it('routes db_list → handleDbList', async () => {
+        const pyodide = makeMockPyodide();
+        const kvFactory = makeMockKVFactory({ profile: { alice: 'A', bob: 'B' } });
+        const result = await routeMessage(
+            { id: 'r7', type: 'db_list', store: 'profile', prefix: 'a' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+        expect(result.type).toBe('db_list_result');
+        if (result.type !== 'db_list_result') throw new Error('unreachable');
+        expect(result.entries).toEqual([{ key: 'alice', value: 'A' }]);
     });
 });
 
-// ── handleDbSave ─────────────────────────────────────────────────────────────
+// ── handleDbPut ──────────────────────────────────────────────────────────────
 
-describe('handleDbSave', () => {
-    it('returns db_save_result with ok=true on success', async () => {
-        const kv = makeMockKV();
+describe('handleDbPut', () => {
+    it('returns db_put_result with ok=true on success', async () => {
+        const kvFactory = makeMockKVFactory();
 
-        const result = await handleDbSave('req-db1', 'profile:1', '{"name":"alice"}', kv);
+        const result = await handleDbPut('req-db1', 'profile', '1', '{"name":"alice"}', kvFactory);
 
-        expect(result.type).toBe('db_save_result');
+        expect(result.type).toBe('db_put_result');
         expect(result).toHaveProperty('ok', true);
         expect(result.id).toBe('req-db1');
     });
 
-    it('calls kv.set with key and value', async () => {
-        const kv = makeMockKV();
-        await handleDbSave('id', 'mykey', 'myval', kv);
+    it('calls store-scoped kv.set with key and value', async () => {
+        const kvFactory = makeMockKVFactory();
+        const kv = kvFactory('profile');
+        await handleDbPut('id', 'profile', 'mykey', 'myval', kvFactory);
 
         expect(kv.set).toHaveBeenCalledWith('mykey', 'myval');
     });
 
-    it('throws when kv is null (ephemeral mode)', async () => {
-        await expect(handleDbSave('id', 'k', 'v', null)).rejects.toThrow(/IndexedDB not available/);
+    it('throws when kvFactory is null (ephemeral mode)', async () => {
+        await expect(handleDbPut('id', 'profile', 'k', 'v', null)).rejects.toThrow(/IndexedDB not available/);
     });
 });
 
-// ── handleDbLoad ─────────────────────────────────────────────────────────────
+// ── handleDbGet ──────────────────────────────────────────────────────────────
 
-describe('handleDbLoad', () => {
-    it('returns db_load_result with string value', async () => {
-        const kv = makeMockKV({ 'profile:1': '{"name":"alice"}' });
+describe('handleDbGet', () => {
+    it('returns db_get_result with string value', async () => {
+        const kvFactory = makeMockKVFactory({ profile: { '1': '{"name":"alice"}' } });
 
-        const result = await handleDbLoad('req-db2', 'profile:1', kv);
+        const result = await handleDbGet('req-db2', 'profile', '1', kvFactory);
 
-        expect(result.type).toBe('db_load_result');
+        expect(result.type).toBe('db_get_result');
         expect(result).toHaveProperty('value', '{"name":"alice"}');
     });
 
     it('returns null when key is missing', async () => {
-        const kv = makeMockKV({});
+        const kvFactory = makeMockKVFactory({});
 
-        const result = await handleDbLoad('req-db3', 'missing', kv);
+        const result = await handleDbGet('req-db3', 'profile', 'missing', kvFactory);
 
-        expect(result.type).toBe('db_load_result');
+        expect(result.type).toBe('db_get_result');
         expect(result).toHaveProperty('value', null);
     });
 
-    it('throws when kv is null (ephemeral mode)', async () => {
-        await expect(handleDbLoad('id', 'k', null)).rejects.toThrow(/IndexedDB not available/);
+    it('throws when kvFactory is null (ephemeral mode)', async () => {
+        await expect(handleDbGet('id', 'profile', 'k', null)).rejects.toThrow(/IndexedDB not available/);
     });
 });
 
-// ── handleDbDelete ───────────────────────────────────────────────────────────
+// ── handleDbDel ──────────────────────────────────────────────────────────────
 
-describe('handleDbDelete', () => {
-    it('returns db_delete_result with ok=true when key existed', async () => {
-        const kv = makeMockKV({ 'profile:1': 'data' });
+describe('handleDbDel', () => {
+    it('returns db_del_result with ok=true when key existed', async () => {
+        const kvFactory = makeMockKVFactory({ profile: { '1': 'data' } });
 
-        const result = await handleDbDelete('req-db5', 'profile:1', kv);
+        const result = await handleDbDel('req-db5', 'profile', '1', kvFactory);
 
-        expect(result.type).toBe('db_delete_result');
+        expect(result.type).toBe('db_del_result');
         expect(result).toHaveProperty('ok', true);
     });
 
     it('returns ok=false when key did not exist', async () => {
-        const kv = makeMockKV({});
+        const kvFactory = makeMockKVFactory({});
 
-        const result = await handleDbDelete('req-db6', 'nonexistent', kv);
+        const result = await handleDbDel('req-db6', 'profile', 'nonexistent', kvFactory);
 
         expect(result).toHaveProperty('ok', false);
     });
 
-    it('throws when kv is null (ephemeral mode)', async () => {
-        await expect(handleDbDelete('id', 'k', null)).rejects.toThrow(/IndexedDB not available/);
+    it('throws when kvFactory is null (ephemeral mode)', async () => {
+        await expect(handleDbDel('id', 'profile', 'k', null)).rejects.toThrow(/IndexedDB not available/);
+    });
+});
+
+// ── handleDbList ─────────────────────────────────────────────────────────────
+
+describe('handleDbList', () => {
+    it('returns db_list_result entries for a prefix', async () => {
+        const kvFactory = makeMockKVFactory({
+            names: {
+                'personal^alice': 'EAlice',
+                'personal^bob': 'EBob',
+                'work^carol': 'ECarol',
+            },
+        });
+
+        const result = await handleDbList('req-db7', 'names', 'personal^', kvFactory);
+
+        expect(result.type).toBe('db_list_result');
+        if (result.type !== 'db_list_result') throw new Error('unreachable');
+        expect(result.entries).toEqual([
+            { key: 'personal^alice', value: 'EAlice' },
+            { key: 'personal^bob', value: 'EBob' },
+        ]);
+    });
+
+    it('returns all entries for an empty prefix', async () => {
+        const kvFactory = makeMockKVFactory({ habs: { 'primary.hab': '{"pre":"E1"}', 'test.hab': '{"pre":"E2"}' } });
+
+        const result = await handleDbList('req-db8', 'habs', '', kvFactory);
+
+        expect(result.type).toBe('db_list_result');
+        if (result.type !== 'db_list_result') throw new Error('unreachable');
+        expect(result.entries).toEqual([
+            { key: 'primary.hab', value: '{"pre":"E1"}' },
+            { key: 'test.hab', value: '{"pre":"E2"}' },
+        ]);
+    });
+
+    it('throws when kvFactory is null (ephemeral mode)', async () => {
+        await expect(handleDbList('id', 'names', '', null)).rejects.toThrow(/IndexedDB not available/);
     });
 });
  
@@ -394,83 +469,154 @@ describe('sign → verify round-trip', () => {
     });
 });
 
-// ── IndexedDB save → load → delete round-trip ───────────────────────────────
+// ── IndexedDB put → get → del round-trip ────────────────────────────────────
 
-describe('IndexedDB save → load → delete round-trip', () => {
-    it('saved data is returned by load', async () => {
+describe('IndexedDB put → get → del round-trip', () => {
+    it('saved data is returned by get', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV();
+        const kvFactory = makeMockKVFactory();
         const profile = JSON.stringify({ name: 'Alice', note: 'KERI controller' });
 
         await routeMessage(
-            { id: 'db-rt1', type: 'db_save', key: 'profile:alice', value: profile },
+            { id: 'db-rt1', type: 'db_put', store: 'profile', key: 'alice', value: profile },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
 
         const loadRes = await routeMessage(
-            { id: 'db-rt2', type: 'db_load', key: 'profile:alice' },
+            { id: 'db-rt2', type: 'db_get', store: 'profile', key: 'alice' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
-        expect(loadRes.type).toBe('db_load_result');
+        expect(loadRes.type).toBe('db_get_result');
         expect(loadRes).toHaveProperty('value', profile);
     });
 
-    it('deleted data returns null on load', async () => {
+    it('deleted data returns null on get', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV();
+        const kvFactory = makeMockKVFactory();
 
         await routeMessage(
-            { id: 'db-rt3', type: 'db_save', key: 'profile:bob', value: '{"name":"Bob"}' },
+            { id: 'db-rt3', type: 'db_put', store: 'profile', key: 'bob', value: '{"name":"Bob"}' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
 
         const delRes = await routeMessage(
-            { id: 'db-rt4', type: 'db_delete', key: 'profile:bob' },
+            { id: 'db-rt4', type: 'db_del', store: 'profile', key: 'bob' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
         expect(delRes).toHaveProperty('ok', true);
 
         const loadRes = await routeMessage(
-            { id: 'db-rt5', type: 'db_load', key: 'profile:bob' },
+            { id: 'db-rt5', type: 'db_get', store: 'profile', key: 'bob' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
         expect(loadRes).toHaveProperty('value', null);
     });
 
     it('overwrite replaces old value', async () => {
         const pyodide = makeMockPyodide();
-        const kv = makeMockKV();
+        const kvFactory = makeMockKVFactory();
 
         await routeMessage(
-            { id: 'db-rt6', type: 'db_save', key: 'k', value: 'v1' },
+            { id: 'db-rt6', type: 'db_put', store: 'profile', key: 'k', value: 'v1' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
         await routeMessage(
-            { id: 'db-rt7', type: 'db_save', key: 'k', value: 'v2' },
+            { id: 'db-rt7', type: 'db_put', store: 'profile', key: 'k', value: 'v2' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
 
         const loadRes = await routeMessage(
-            { id: 'db-rt8', type: 'db_load', key: 'k' },
+            { id: 'db-rt8', type: 'db_get', store: 'profile', key: 'k' },
             pyodide,
             true,
-            kv,
+            kvFactory,
         );
         expect(loadRes).toHaveProperty('value', 'v2');
+    });
+
+    it('keeps stores isolated during list operations', async () => {
+        const pyodide = makeMockPyodide();
+        const kvFactory = makeMockKVFactory({
+            names: { 'personal^alice': 'EAlice' },
+            habs: { 'personal^alice': '{"pre":"EAlice"}' },
+        });
+
+        const result = await routeMessage(
+            { id: 'db-rt9', type: 'db_list', store: 'names', prefix: '' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        expect(result.type).toBe('db_list_result');
+        if (result.type !== 'db_list_result') throw new Error('unreachable');
+        expect(result.entries).toEqual([{ key: 'personal^alice', value: 'EAlice' }]);
+    });
+
+    it('models FortWeb registry and per-vault store names without widening the contract', async () => {
+        const pyodide = makeMockPyodide();
+        const kvFactory = makeMockKVFactory();
+        const registryStore = 'fortweb-vault-registry:vaults.';
+        const vaultStateStore = 'fortweb-vault-alpha:kfst.';
+
+        await routeMessage(
+            {
+                id: 'fw-1',
+                type: 'db_put',
+                store: registryStore,
+                key: 'alpha',
+                value: '{"id":"alpha","opened":true}',
+            },
+            pyodide,
+            true,
+            kvFactory,
+        );
+        await routeMessage(
+            {
+                id: 'fw-2',
+                type: 'db_put',
+                store: vaultStateStore,
+                key: 'state',
+                value: '{"status":"ready"}',
+            },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        const registryRes = await routeMessage(
+            { id: 'fw-3', type: 'db_list', store: registryStore, prefix: '' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+        const stateRes = await routeMessage(
+            { id: 'fw-4', type: 'db_get', store: vaultStateStore, key: 'state' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        expect(registryRes.type).toBe('db_list_result');
+        if (registryRes.type !== 'db_list_result') throw new Error('unreachable');
+        expect(registryRes.entries).toEqual([{ key: 'alpha', value: '{"id":"alpha","opened":true}' }]);
+
+        expect(stateRes.type).toBe('db_get_result');
+        expect(stateRes).toHaveProperty('value', '{"status":"ready"}');
     });
 });
 

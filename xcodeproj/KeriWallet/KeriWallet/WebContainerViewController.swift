@@ -9,7 +9,8 @@ final class WebContainerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        view.backgroundColor = .systemBackground
+        overrideUserInterfaceStyle = AppConfig.Appearance.interfaceStyle
+        view.backgroundColor = AppConfig.Appearance.backgroundColor
 
         let userContentController = WKUserContentController()
 
@@ -43,11 +44,7 @@ final class WebContainerViewController: UIViewController {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
-        webView.underPageBackgroundColor = UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? AppConfig.Brand.darkBackground
-                : AppConfig.Brand.lightBackground
-        }
+        webView.underPageBackgroundColor = AppConfig.Appearance.backgroundColor
         // CSS env(safe-area-inset-*) owns all insets — prevent UIKit double-counting.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         #if DEBUG
@@ -69,7 +66,7 @@ final class WebContainerViewController: UIViewController {
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
+        AppConfig.Appearance.statusBarStyle
     }
 
     deinit {

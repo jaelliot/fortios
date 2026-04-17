@@ -14,12 +14,12 @@
 //   kv.ts             — owns the WorkerKV interface and IndexedDB implementation
 //
 
-import type { WorkerKV } from './kv';
+import type { KVFactory, WorkerKV } from './kv';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
 
 // Re-export WorkerKV so existing consumers that import from worker_router still work.
-export { openIdbKV } from './kv';
-export type { WorkerKV } from './kv';
+export { openIdbKVFactory } from './kv';
+export type { KVFactory, WorkerKV } from './kv';
 
 // ── Per-command handlers ─────────────────────────────────────────────────────
 
@@ -79,35 +79,54 @@ _vresult
 
 const IDB_UNAVAILABLE = 'IndexedDB not available (ephemeral mode)';
 
-export async function handleDbSave(
+function requireKV(store: string, kvFactory: KVFactory | null): WorkerKV {
+    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
+    return kvFactory(store);
+}
+
+export async function handleDbPut(
     id: string,
+    store: string,
     key: string,
     value: string,
-    kv: WorkerKV | null,
+    kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    const kv = requireKV(store, kvFactory);
     await kv.set(key, value);
-    return { id, type: 'db_save_result', ok: true };
+    return { id, type: 'db_put_result', ok: true };
 }
 
-export async function handleDbLoad(
+export async function handleDbGet(
     id: string,
+    store: string,
     key: string,
-    kv: WorkerKV | null,
+    kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    const kv = requireKV(store, kvFactory);
     const value = await kv.get(key);
-    return { id, type: 'db_load_result', value };
+    return { id, type: 'db_get_result', value };
 }
 
-export async function handleDbDelete(
+export async function handleDbDel(
     id: string,
+    store: string,
     key: string,
-    kv: WorkerKV | null,
+    kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    if (!kv) throw new Error(IDB_UNAVAILABLE);
+    const kv = requireKV(store, kvFactory);
     const ok = await kv.del(key);
-    return { id, type: 'db_delete_result', ok };
+    return { id, type: 'db_del_result', ok };
+}
+
+export async function handleDbList(
+    id: string,
+    store: string,
+    prefix: string,
+    kvFactory: KVFactory | null,
+): Promise<WorkerOutbound> {
+    const kv = requireKV(store, kvFactory);
+    const entries = await kv.list(prefix);
+    return { id, type: 'db_list_result', entries };
 }
 
 // ── Message dispatch ─────────────────────────────────────────────────────────
@@ -119,7 +138,7 @@ export async function handleDbDelete(
  * or `false` when the worker is not yet initialised produces an `error` result
  * rather than throwing, so `self.onmessage` never rejects.
  *
- * `kv` is the pure-JS IndexedDB key-value store (or `null` in ephemeral mode).
+ * `kvFactory` is the pure-JS IndexedDB key-value store factory (or `null` in ephemeral mode).
  *
  * The `init` command is intentionally NOT handled here — it belongs to the
  * boot lifecycle in `pyodide_worker.ts`.
@@ -128,7 +147,7 @@ export async function routeMessage(
     cmd: Exclude<WorkerInbound, { type: 'init' | 'visibility_change' }>,
     pyodide: PyodideInterface | null,
     booted: boolean,
-    kv: WorkerKV | null = null,
+    kvFactory: KVFactory | null = null,
 ): Promise<WorkerOutbound> {
     if (!booted || pyodide === null) {
         return { id: cmd.id, type: 'error', error: 'worker not initialized' };
@@ -141,12 +160,14 @@ export async function routeMessage(
             return handleSign(cmd.id, cmd.message, pyodide);
         case 'verify':
             return handleVerify(cmd.id, cmd.message, cmd.signature, cmd.publicKey, pyodide);
-        case 'db_save':
-            return handleDbSave(cmd.id, cmd.key, cmd.value, kv);
-        case 'db_load':
-            return handleDbLoad(cmd.id, cmd.key, kv);
-        case 'db_delete':
-            return handleDbDelete(cmd.id, cmd.key, kv);
+        case 'db_put':
+            return handleDbPut(cmd.id, cmd.store, cmd.key, cmd.value, kvFactory);
+        case 'db_get':
+            return handleDbGet(cmd.id, cmd.store, cmd.key, kvFactory);
+        case 'db_del':
+            return handleDbDel(cmd.id, cmd.store, cmd.key, kvFactory);
+        case 'db_list':
+            return handleDbList(cmd.id, cmd.store, cmd.prefix, kvFactory);
         default: {
             const exhaustive: never = cmd;
             return {

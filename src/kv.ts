@@ -21,12 +21,26 @@
 
 import { IDB_DATABASE_NAME, IDB_DEFAULT_STORE } from './constants';
 
+const STORE_KEY_SEPARATOR = '/';
+const PREFIX_SCAN_SENTINEL = '\uffff';
+
+export interface KVEntry {
+    key: string;
+    value: string;
+}
+
 /** Minimal async key-value interface — implemented by IdbKV, mockable in tests. */
 export interface WorkerKV {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
     del(key: string): Promise<boolean>;
+    list(prefix: string): Promise<KVEntry[]>;
     /** Proactively close the underlying connection (called on app background). */
+    close(): void;
+}
+
+export interface KVFactory {
+    (store: string): WorkerKV;
     close(): void;
 }
 
@@ -43,11 +57,12 @@ export interface WorkerKV {
  * DOMException the handle is dropped, a new connection is opened, and the
  * operation is retried exactly once.
  */
-export async function openIdbKV(
+export async function openIdbKVFactory(
     dbName: string = IDB_DATABASE_NAME,
     storeName: string = IDB_DEFAULT_STORE,
-): Promise<WorkerKV> {
+): Promise<KVFactory> {
     let db: IDBDatabase | null = null;
+    const cache = new Map<string, WorkerKV>();
 
     /** Open (or reuse) the underlying IDBDatabase handle. */
     async function connect(): Promise<IDBDatabase> {
@@ -95,42 +110,102 @@ export async function openIdbKV(
         }
     }
 
-    return {
-        get(key: string): Promise<string | null> {
-            return withRetry((database) =>
-                new Promise((resolve, reject) => {
-                    const tx = database.transaction(storeName, 'readonly');
-                    const req = tx.objectStore(storeName).get(key);
-                    req.onsuccess = () => resolve(req.result !== undefined ? String(req.result) : null);
-                    req.onerror = () => reject(new Error(`IDB get failed: ${req.error?.message}`));
-                }),
-            );
-        },
-        set(key: string, value: string): Promise<void> {
-            return withRetry((database) =>
-                new Promise((resolve, reject) => {
-                    const tx = database.transaction(storeName, 'readwrite');
-                    const req = tx.objectStore(storeName).put(value, key);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(new Error(`IDB set failed: ${req.error?.message}`));
-                }),
-            );
-        },
-        del(key: string): Promise<boolean> {
-            return withRetry((database) =>
-                new Promise((resolve, reject) => {
-                    const tx = database.transaction(storeName, 'readwrite');
-                    const req = tx.objectStore(storeName).delete(key);
-                    req.onsuccess = () => resolve(true);
-                    req.onerror = () => reject(new Error(`IDB del failed: ${req.error?.message}`));
-                }),
-            );
-        },
-        close(): void {
-            if (db) {
-                db.close();
-                db = null;
-            }
-        },
-    };
+    function composeKey(store: string, key: string): string {
+        return `${store}${STORE_KEY_SEPARATOR}${key}`;
+    }
+
+    function close(): void {
+        if (db) {
+            db.close();
+            db = null;
+        }
+    }
+
+    function scopedKV(store: string): WorkerKV {
+        const existing = cache.get(store);
+        if (existing) return existing;
+
+        const storePrefix = `${store}${STORE_KEY_SEPARATOR}`;
+        const kv: WorkerKV = {
+            get(key: string): Promise<string | null> {
+                const fullKey = composeKey(store, key);
+                return withRetry((database) =>
+                    new Promise((resolve, reject) => {
+                        const tx = database.transaction(storeName, 'readonly');
+                        const req = tx.objectStore(storeName).get(fullKey);
+                        req.onsuccess = () => resolve(req.result !== undefined ? (req.result as string) : null);
+                        req.onerror = () => reject(new Error(`IDB get failed: ${req.error?.message}`));
+                    }),
+                );
+            },
+            set(key: string, value: string): Promise<void> {
+                const fullKey = composeKey(store, key);
+                return withRetry((database) =>
+                    new Promise((resolve, reject) => {
+                        const tx = database.transaction(storeName, 'readwrite');
+                        const req = tx.objectStore(storeName).put(value, fullKey);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(new Error(`IDB set failed: ${req.error?.message}`));
+                    }),
+                );
+            },
+            del(key: string): Promise<boolean> {
+                const fullKey = composeKey(store, key);
+                return withRetry((database) =>
+                    new Promise((resolve, reject) => {
+                        const tx = database.transaction(storeName, 'readwrite');
+                        const objectStore = tx.objectStore(storeName);
+                        const getReq = objectStore.get(fullKey);
+                        getReq.onerror = () => reject(new Error(`IDB get failed: ${getReq.error?.message}`));
+                        getReq.onsuccess = () => {
+                            if (getReq.result === undefined) {
+                                resolve(false);
+                                return;
+                            }
+
+                            const delReq = objectStore.delete(fullKey);
+                            delReq.onsuccess = () => resolve(true);
+                            delReq.onerror = () => reject(new Error(`IDB del failed: ${delReq.error?.message}`));
+                        };
+                    }),
+                );
+            },
+            list(prefix: string): Promise<KVEntry[]> {
+                const fullPrefix = composeKey(store, prefix);
+                const range = IDBKeyRange.bound(fullPrefix, fullPrefix + PREFIX_SCAN_SENTINEL);
+                return withRetry((database) =>
+                    new Promise((resolve, reject) => {
+                        const tx = database.transaction(storeName, 'readonly');
+                        const req = tx.objectStore(storeName).openCursor(range);
+                        const entries: KVEntry[] = [];
+
+                        req.onsuccess = () => {
+                            const cursor = req.result;
+                            if (!cursor) {
+                                resolve(entries);
+                                return;
+                            }
+
+                            entries.push({
+                                key: String(cursor.key).slice(storePrefix.length),
+                                value: cursor.value as string,
+                            });
+                            cursor.continue();
+                        };
+
+                        req.onerror = () => reject(new Error(`IDB list failed: ${req.error?.message}`));
+                    }),
+                );
+            },
+            close,
+        };
+
+        cache.set(store, kv);
+        return kv;
+    }
+
+    const factory = ((store: string) => scopedKV(store)) as KVFactory;
+    factory.close = close;
+
+    return factory;
 }

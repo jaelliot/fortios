@@ -1,4 +1,12 @@
-import { LOADING_FADE_MS, PROOF_CHALLENGE } from './constants';
+import {
+    FORTWEB_KF_STATE_SUBDB,
+    FORTWEB_REGISTRY_STORE,
+    LOADING_FADE_MS,
+    PROOF_CHALLENGE,
+    fortwebRegistryWorkerStore,
+    fortwebVaultStorageName,
+    fortwebVaultWorkerStore,
+} from './constants';
 import {
     generateId,
     initPyodide,
@@ -78,12 +86,13 @@ async function saveProfile(): Promise<void> {
     const cmdId = generateId();
     const result = await sendToWorker({
         id: cmdId,
-        type: 'db_save',
-        key: `profile:${id}`,
+        type: 'db_put',
+        store: 'profile',
+        key: id,
         value: JSON.stringify(record),
     });
 
-    if (result.type === 'db_save_result' && result.ok) {
+    if (result.type === 'db_put_result' && result.ok) {
         setDbStatus(`Saved profile '${id}'.`);
         if (recordJsonEl) recordJsonEl.textContent = JSON.stringify(record, null, 2);
         log(`saved profile id=${id}`);
@@ -99,11 +108,12 @@ async function loadProfile(): Promise<void> {
     const cmdId = generateId();
     const result = await sendToWorker({
         id: cmdId,
-        type: 'db_load',
-        key: `profile:${id}`,
+        type: 'db_get',
+        store: 'profile',
+        key: id,
     });
 
-    if (result.type === 'db_load_result') {
+    if (result.type === 'db_get_result') {
         if (result.value === null) {
             setDbStatus(`No profile found for '${id}'.`, false);
             if (recordJsonEl) recordJsonEl.textContent = 'No record loaded.';
@@ -129,6 +139,81 @@ function installProfileHandlers(): void {
     btnSaveEl?.addEventListener('click', () => { void saveProfile(); });
     btnLoadEl?.addEventListener('click', () => { void loadProfile(); });
     setDbStatus('Ready. Enter profile id and name, then Save or Load.');
+}
+
+async function putWorkerValue(store: string, key: string, value: string): Promise<void> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_put', store, key, value });
+    if (result.type !== 'db_put_result' || !result.ok) {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+}
+
+async function getWorkerValue(store: string, key: string): Promise<string | null> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_get', store, key });
+    if (result.type !== 'db_get_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+    return result.value;
+}
+
+async function listWorkerValues(store: string, prefix: string): Promise<Array<{ key: string; value: string }>> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_list', store, prefix });
+    if (result.type !== 'db_list_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+    return result.entries;
+}
+
+async function deleteWorkerValue(store: string, key: string): Promise<void> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_del', store, key });
+    if (result.type !== 'db_del_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+}
+
+// Prove one real FortWeb storage slice on the live worker seam: registry entry
+// plus per-vault key-state data using the same naming model FortWeb uses.
+async function runFortwebStorageProof(): Promise<void> {
+    const vaultId = 'proof-alpha';
+    const registryStore = fortwebRegistryWorkerStore();
+    const vaultStateStore = fortwebVaultWorkerStore(vaultId);
+    const createdAt = isoNow();
+    const registryValue = JSON.stringify({
+        id: vaultId,
+        alias: 'Proof Alpha',
+        storageName: fortwebVaultStorageName(vaultId),
+        runtimeMode: 'pyodide-worker',
+        createdAt,
+    });
+    const stateValue = JSON.stringify({
+        status: 'ready',
+        vaultId,
+        updatedAt: createdAt,
+    });
+
+    log(`fortweb storage proof: registry=${registryStore} vaultState=${vaultStateStore}`);
+
+    try {
+        await putWorkerValue(registryStore, vaultId, registryValue);
+        await putWorkerValue(vaultStateStore, 'state', stateValue);
+
+        const registryEntries = await listWorkerValues(registryStore, '');
+        const registryEntry = registryEntries.find((entry) => entry.key === vaultId);
+        if (!registryEntry || registryEntry.value !== registryValue) {
+            throw new Error(`FortWeb registry proof failed for ${FORTWEB_REGISTRY_STORE}${vaultId}`);
+        }
+
+        const loadedState = await getWorkerValue(vaultStateStore, 'state');
+        if (loadedState !== stateValue) {
+            throw new Error(`FortWeb vault state proof failed for ${FORTWEB_KF_STATE_SUBDB}state`);
+        }
+
+        log(`fortweb storage proof: registry + ${FORTWEB_KF_STATE_SUBDB} state round-trip ok`);
+    } finally {
+        await deleteWorkerValue(vaultStateStore, 'state');
+        await deleteWorkerValue(registryStore, vaultId);
+        log('fortweb storage proof: cleaned proof records');
+    }
 }
 
 // ── Boot-time proof ───────────────────────────────────────────────────────────
@@ -166,6 +251,9 @@ async function main(): Promise<void> {
 
     setStatus('running proof');
     await runProof();
+
+    setStatus('running fortweb storage proof');
+    await runFortwebStorageProof();
 
     setStatus('done', 'done');
     postToBridge({ type: 'lifecycle', timestamp: isoNow(), message: 'done' });

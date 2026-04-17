@@ -124,6 +124,17 @@ enum AppConfig {
             red: 245.0 / 255.0, green: 245.0 / 255.0, blue: 247.0 / 255.0, alpha: 1)
     }
 
+    // MARK: - Host Appearance
+
+    /// The FortWeb-backed shell is currently light-only. Keep the native container,
+    /// safe-area background, and status bar in the matching host appearance until
+    /// the web payload exposes an appearance bridge to native.
+    enum Appearance {
+        static let interfaceStyle: UIUserInterfaceStyle = .light
+        static let statusBarStyle: UIStatusBarStyle = .darkContent
+        static let backgroundColor = Brand.lightBackground
+    }
+
     // MARK: - Demo / Debug
 
     #if DEBUG

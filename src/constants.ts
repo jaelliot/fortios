@@ -39,6 +39,37 @@ export const IDB_DATABASE_NAME = 'keri-wallet';
 /** IndexedDB store name for the default key-value namespace. */
 export const IDB_DEFAULT_STORE = 'main';
 
+// ── FortWeb storage proof mapping ──────────────────────────────────────────
+/** FortWeb registry database name used by the browser lane. */
+export const FORTWEB_REGISTRY_NAME = 'fortweb-vault-registry';
+
+/** FortWeb registry subdb name used to store vault metadata records. */
+export const FORTWEB_REGISTRY_STORE = 'vaults.';
+
+/** Prefix FortWeb uses for per-vault storage names. */
+export const FORTWEB_WALLET_STORAGE_PREFIX = 'fortweb-vault-';
+
+/** FortWeb key-state subdb used inside each vault storage namespace. */
+export const FORTWEB_KF_STATE_SUBDB = 'kfst.';
+
+/** Map the FortWeb registry DB + subdb pair onto the Fort-ios store-scoped worker seam. */
+export function fortwebRegistryWorkerStore(): string {
+	return `${FORTWEB_REGISTRY_NAME}:${FORTWEB_REGISTRY_STORE}`;
+}
+
+/** Build the FortWeb per-vault storage name exactly as the browser worker does. */
+export function fortwebVaultStorageName(vaultId: string): string {
+	return `${FORTWEB_WALLET_STORAGE_PREFIX}${vaultId}`;
+}
+
+/** Map one FortWeb per-vault subdb onto the Fort-ios store-scoped worker seam. */
+export function fortwebVaultWorkerStore(
+	vaultId: string,
+	subdb: string = FORTWEB_KF_STATE_SUBDB,
+): string {
+	return `${fortwebVaultStorageName(vaultId)}:${subdb}`;
+}
+
 // ── Demo / Proof ─────────────────────────────────────────────────────────────
 /** Challenge string used in the boot-time proof-of-concept crypto cycle. */
 export const PROOF_CHALLENGE = 'keriwasm proof vector v1';
