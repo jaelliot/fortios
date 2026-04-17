@@ -39,7 +39,7 @@ test-e2e: ## Run Playwright E2E tests (excludes @slow Pyodide tests)
 	npx playwright test --grep-invert "@slow"
 
 test-e2e-slow: ## Run all E2E tests including slow Pyodide roundtrip (120s timeout)
-	npm run build
+	bash build-payload.sh
 	npx playwright test
 
 bridge-check: ## Verify bridge-contract.ts, BridgeContract.swift, and BridgeContract.kt are up to date

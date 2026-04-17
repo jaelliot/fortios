@@ -85,7 +85,7 @@ echo "[build-payload] pyodide bundle ok ($(du -sh "${PAYLOAD_DIR}/dist/pyodide" 
 # subset live in keriwasm/python/ — the single source of truth for all Pyodide
 # Python files.  We cherry-pick only the files needed at runtime.
 KERIWASM_PYTHON_DIR="${SCRIPT_DIR}/../keriwasm/python"
-PYTHON_FILES=(indexeddb_python.py pysodium.py lmdb.py)
+PYTHON_FILES=(indexeddb_python.py)
 
 if [[ ! -d "${KERIWASM_PYTHON_DIR}" ]]; then
   echo "error: keriwasm/python/ not found at ${KERIWASM_PYTHON_DIR}" 1>&2
@@ -102,6 +102,25 @@ for pyfile in "${PYTHON_FILES[@]}"; do
   fi
   cp "${src}" "${PAYLOAD_DIST_DIR}/python/${pyfile}"
 done
+
+# Fallback compatibility shims are generated locally because modern keriwasm
+# no longer carries standalone pysodium.py and lmdb.py files.
+cat > "${PAYLOAD_DIST_DIR}/python/pysodium.py" <<'PY'
+"""Compatibility shim mapping pysodium imports to pychloride."""
+
+from pychloride import *  # noqa: F401,F403
+PY
+
+cat > "${PAYLOAD_DIST_DIR}/python/lmdb.py" <<'PY'
+"""LMDB placeholder shim for Pyodide payloads using IndexedDB persistence."""
+
+class Error(Exception):
+    """Compatibility exception type for code importing lmdb.Error."""
+
+
+def open(*_args, **_kwargs):
+    raise Error("lmdb shim: persistent storage is provided by indexeddb_python")
+PY
 
 # Bundle hio subset (required for keripy imports: doing, decking, ogling, etc.)
 HIO_SRC_DIR="${KERIWASM_PYTHON_DIR}/hio"

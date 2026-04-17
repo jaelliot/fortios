@@ -133,6 +133,7 @@ Capture and attach these artifacts for each full validation run:
 - Simulator logs from `make logs-sim`.
 - Device logs from `make logs-device`.
 - Short pass/fail notes for flows A-E.
+- Append each run summary to `CONFERENCE-IOS-VALIDATION-RUNS.md`.
 
 Note:
 - In Debug builds, a warning that `handleNativeCommand` is unavailable may appear when the host dispatches a demo crypto command. This warning is expected on payloads that do not expose that debug hook and is not a blocker by itself.

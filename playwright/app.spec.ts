@@ -109,11 +109,14 @@ test.describe('@slow Pyodide roundtrip', () => {
 
         await page.goto('/');
 
-        // Wait for a lifecycle:ready message to be posted to the bridge
+        // Wait for lifecycle completion. The current app posts lifecycle:boot
+        // and lifecycle:done, and also updates visible status text.
         await page.waitForFunction(
             () => {
                 const msgs = (window as unknown as { __workerMessages?: Array<{ type: string; message?: string }> }).__workerMessages ?? [];
-                return msgs.some((m) => m.type === 'lifecycle' && m.message === 'ready');
+                const lifecycleDone = msgs.some((m) => m.type === 'lifecycle' && m.message === 'done');
+                const statusText = (document.getElementById('status')?.textContent ?? '').toLowerCase();
+                return lifecycleDone || statusText.includes('done');
             },
             { timeout: 90_000, polling: 1000 },
         );
@@ -121,6 +124,9 @@ test.describe('@slow Pyodide roundtrip', () => {
         const messages = await page.evaluate(
             () => (window as unknown as { __workerMessages: unknown[] }).__workerMessages,
         );
+
+        const workerLogText = await page.locator('#output').innerText();
+        expect(workerLogText).not.toContain('Pyodide boot failed');
         expect(messages.some((m) => (m as { type: string }).type === 'lifecycle')).toBe(true);
     });
 });
