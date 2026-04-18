@@ -53,6 +53,10 @@ final class WebContainerViewController: UIViewController {
         webView.underPageBackgroundColor = AppConfig.Appearance.backgroundColor
         // CSS env(safe-area-inset-*) owns all insets — prevent UIKit double-counting.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        // Keep visual scale at 1.0 so fixed tab bars align with hit testing (pinch/double-tap zoom otherwise offsets taps).
+        webView.scrollView.minimumZoomScale = 1.0
+        webView.scrollView.maximumZoomScale = 1.0
+        webView.scrollView.bouncesZoom = false
         #if DEBUG
             webView.isInspectable = true
         #endif
