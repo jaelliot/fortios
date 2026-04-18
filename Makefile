@@ -115,7 +115,7 @@ parity-smoke: ## Run the shared payload through simulator then device (requires 
 	$(MAKE) run-device PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR) DEVICE_REF="$(DEVICE_REF)"
 
 logs-sim: ## Show recent simulator logs for KeriWallet
-	xcrun simctl spawn booted log show --style compact --last 10m --predicate 'process == "KeriWallet" OR eventMessage CONTAINS[c] "WebBridge" OR eventMessage CONTAINS[c] "WebContainer" OR eventMessage CONTAINS[c] "SchemeHandler"' | tail -n 200
+	xcrun simctl spawn booted log show --style compact --last 10m --predicate 'subsystem == "com.kerifoundation.wallet" AND (category == "WebBridge" OR category == "WebContainer" OR category == "SchemeHandler" OR category == "WebNav")' | tail -n 200
 
 logs-device: ## Relaunch on device with console attached (use DEVICE_REF=<udid-or-name>)
 	@if [ -z "$(DEVICE_REF)" ]; then \

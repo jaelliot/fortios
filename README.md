@@ -240,7 +240,7 @@ Files: `src/__tests__/worker_router.test.ts` (12 tests), `src/__tests__/constant
 
 ### Layer 3 — Playwright E2E tests
 
-Structural browser tests that load the built app in Chromium headless and assert DOM invariants, JS error absence, and bridge contract alignment. Today these tests primarily validate the local proof harness. They should not be read as end-to-end proof that the FortWeb-hosted product path is green. The Pyodide roundtrip test is tagged `@slow` (120 s) and excluded from the default CI run.
+Structural browser tests that load the built app in Chromium headless and assert DOM invariants, JS error absence, and bridge contract alignment. Today these tests validate only the local seam-validation lane. They should not be read as end-to-end proof that the FortWeb-hosted product path is green. The Pyodide roundtrip test is tagged `@slow` (120 s) and excluded from the default CI run.
 
 ```sh
 make test-e2e          # structural tests only (~5 s)
@@ -248,6 +248,8 @@ make test-e2e-slow     # includes Pyodide boot roundtrip (~120 s)
 ```
 
 Files: `playwright/app.spec.ts`.
+
+For the native wrapper itself, use `make logs-sim`, `make logs-device`, or Console.app to inspect the retained host-side breadcrumbs around initial payload load, first bridge receipt, blocked navigation, and scheme-handler failures.
 
 ### Run everything
 

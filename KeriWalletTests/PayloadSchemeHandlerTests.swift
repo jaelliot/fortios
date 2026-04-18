@@ -219,4 +219,24 @@ struct PathNormalisationTests {
         #expect(mime == "application/zip")
         #expect(!mime.contains("charset"))
     }
+
+    @Test("serving index retains an operator-visible breadcrumb")
+    func servingIndexRetainsBreadcrumb() throws {
+        AppLogger.resetRetainedBreadcrumbs()
+
+        let tmp: URL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        _ = try writeFile(tmp.appendingPathComponent("index.html"), content: "<html></html>")
+
+        let handler = makeHandler(dir: tmp)
+        _ = try handler.loadResource(for: URL(string: "\(AppConfig.Scheme.name)://local/index.html")!)
+
+        let breadcrumb = AppLogger.retainedBreadcrumbs().last
+        #expect(breadcrumb?.level == .notice)
+        #expect(breadcrumb?.category == AppConfig.Log.schemeHandler)
+        #expect(breadcrumb?.message.contains("served initial document") == true)
+    }
 }

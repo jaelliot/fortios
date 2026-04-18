@@ -21,10 +21,16 @@ final class WebContainerViewController: UIViewController {
         // Receive crypto operation results from Pyodide worker via JS bridge
         bridge.onCryptoResult = { [weak self] payload in
             _ = self  // suppress unused warning; callers can extend this
-            AppLogger.info(
-                "[WebContainer] crypto_result id=\(payload.id) error=\(payload.error ?? "nil")",
-                category: AppConfig.Log.webContainer
-            )
+            if let error = payload.error, !error.isEmpty {
+                AppLogger.warning(
+                    "[WebContainer] crypto_result id=\(payload.id) error",
+                    category: AppConfig.Log.webContainer)
+                return
+            }
+
+            AppLogger.debug(
+                "[WebContainer] crypto_result id=\(payload.id) ok",
+                category: AppConfig.Log.webContainer)
         }
 
         let config = WKWebViewConfiguration()
@@ -81,23 +87,10 @@ final class WebContainerViewController: UIViewController {
             return
         }
 
-        AppLogger.info(
-            "[WebContainer] loading initial payload", category: AppConfig.Log.webContainer)
+        AppLogger.notice(
+            "[WebContainer] loading initial payload entry=\(AppConfig.Scheme.entryURL)",
+            category: AppConfig.Log.webContainer)
         webView.load(URLRequest(url: url))
-
-        // Demo: trigger a Swift-initiated crypto op after a delay.
-        // Pyodide boots asynchronously in the Web Worker; the delay is conservative
-        // for Debug builds on the Simulator. In production, drive this from
-        // a lifecycle:done bridge message instead.
-        #if DEBUG
-            DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.Demo.cryptoDispatchDelay) { [weak self] in
-                self?.runCryptoOperation([
-                    "id": UUID().uuidString,
-                    "type": AppConfig.Demo.operationType,
-                    "data": AppConfig.Demo.hashData
-                ])
-            }
-        #endif
     }
 
     /// Dispatch a crypto operation to the Pyodide Web Worker via JS.

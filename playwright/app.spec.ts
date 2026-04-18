@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// These tests currently validate the local proof harness and bridge seam.
+// These tests validate only the local seam-validation payload and bridge seam.
 // They should not be treated as end-to-end proof that the FortWeb-hosted
 // product path is green on iOS.
 
@@ -15,7 +15,7 @@ import { test, expect } from '@playwright/test';
 // 20-40s to download and load the runtime, which is too slow for PR-blocking CI.
 // The Pyodide roundtrip is covered by a separate @slow tagged test below.
 
-test.describe('KERI Wallet app shell', () => {
+test.describe('KERI Wallet seam-validation shell', () => {
     test('page title is KERI Wallet', async ({ page }) => {
         await page.goto('/');
         await expect(page).toHaveTitle('KERI Wallet');

@@ -89,7 +89,7 @@
       touch-action: manipulation;
     }
 
-    /* ─── Loading screen (visible during Pyodide boot) ──────────────── */
+    /* ─── Loading screen (visible during seam validation boot) ──────── */
     #loading {
       display: flex;
       flex-direction: column;
@@ -138,7 +138,7 @@
       }
     }
 
-    /* ─── Main app (hidden until Pyodide ready) ─────────────────────── */
+    /* ─── Main app (hidden until the seam-validation lane is ready) ─── */
     #app {
       display: none;
     }
@@ -237,7 +237,7 @@
       }
     }
 
-    /* ─── Profile form (IndexedDB persistence demo) ──────────────────── */
+    /* ─── Profile form (IndexedDB seam validation) ───────────────────── */
     .profile-section {
       margin-top: var(--space-lg);
       padding-top: var(--space-md);
@@ -384,18 +384,18 @@
     <span id="loading-status">Initializing…</span>
   </div>
 
-  <!-- Main app: revealed after Pyodide boots -->
+  <!-- Main app: revealed after the local seam-validation lane boots -->
   <div id="app">
     <div class="header">
       <img src="./FullLogo.svg" alt="KERI Foundation" />
     </div>
     <div class="status-row">
       <span class="status-dot" id="status-dot"></span>
-      <span id="status">booting</span>
+      <span id="status">booting seam validation</span>
     </div>
     <pre id="output"></pre>
 
-    <!-- Profile persistence demo (IndexedDB via Pyodide worker) -->
+    <!-- Profile persistence seam check (IndexedDB via Pyodide worker) -->
     <div class="profile-section">
       <div class="field-group">
         <label for="profile-id">Profile ID</label>

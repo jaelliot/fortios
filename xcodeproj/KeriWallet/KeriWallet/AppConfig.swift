@@ -134,18 +134,4 @@ enum AppConfig {
         static let statusBarStyle: UIStatusBarStyle = .darkContent
         static let backgroundColor = Brand.lightBackground
     }
-
-    // MARK: - Demo / Debug
-
-    #if DEBUG
-        enum Demo {
-            /// Seconds after initial load before the demo crypto operation fires.
-            /// Conservative for Simulator; production should use bridge lifecycle messages.
-            static let cryptoDispatchDelay: TimeInterval = 8.0
-            /// The worker command type for the demo operation.
-            static let operationType = "blake3_hash"
-            /// Data payload for the demo hash.
-            static let hashData = "hello from swift"
-        }
-    #endif
 }

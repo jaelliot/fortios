@@ -29,7 +29,7 @@ const statusEl = document.getElementById('status');
 const statusDotEl = document.getElementById('status-dot');
 const outputEl = document.getElementById('output');
 
-// Profile form elements (IndexedDB persistence demo)
+// Profile form elements for the local seam-validation lane.
 const profileIdEl = document.getElementById('profile-id') as HTMLInputElement | null;
 const profileNameEl = document.getElementById('profile-name') as HTMLInputElement | null;
 const profileNoteEl = document.getElementById('profile-note') as HTMLTextAreaElement | null;
@@ -174,7 +174,7 @@ async function deleteWorkerValue(store: string, key: string): Promise<void> {
     }
 }
 
-// Prove one real FortWeb storage slice on the live worker seam: registry entry
+// Validate one real FortWeb storage slice on the live worker seam: registry entry
 // plus per-vault key-state data using the same naming model FortWeb uses.
 async function runFortwebStorageProof(): Promise<void> {
     const vaultId = 'proof-alpha';
@@ -194,7 +194,7 @@ async function runFortwebStorageProof(): Promise<void> {
         updatedAt: createdAt,
     });
 
-    log(`fortweb storage proof: registry=${registryStore} vaultState=${vaultStateStore}`);
+    log(`fortweb storage seam check: registry=${registryStore} vaultState=${vaultStateStore}`);
 
     try {
         await putWorkerValue(registryStore, vaultId, registryValue);
@@ -203,23 +203,23 @@ async function runFortwebStorageProof(): Promise<void> {
         const registryEntries = await listWorkerValues(registryStore, '');
         const registryEntry = registryEntries.find((entry) => entry.key === vaultId);
         if (!registryEntry || registryEntry.value !== registryValue) {
-            throw new Error(`FortWeb registry proof failed for ${FORTWEB_REGISTRY_STORE}${vaultId}`);
+            throw new Error(`FortWeb registry seam check failed for ${FORTWEB_REGISTRY_STORE}${vaultId}`);
         }
 
         const loadedState = await getWorkerValue(vaultStateStore, 'state');
         if (loadedState !== stateValue) {
-            throw new Error(`FortWeb vault state proof failed for ${FORTWEB_KF_STATE_SUBDB}state`);
+            throw new Error(`FortWeb vault state seam check failed for ${FORTWEB_KF_STATE_SUBDB}state`);
         }
 
-        log(`fortweb storage proof: registry + ${FORTWEB_KF_STATE_SUBDB} state round-trip ok`);
+        log(`fortweb storage seam check: registry + ${FORTWEB_KF_STATE_SUBDB} state round-trip ok`);
     } finally {
         await deleteWorkerValue(vaultStateStore, 'state');
         await deleteWorkerValue(registryStore, vaultId);
-        log('fortweb storage proof: cleaned proof records');
+        log('fortweb storage seam check: cleaned validation records');
     }
 }
 
-// ── Boot-time proof ───────────────────────────────────────────────────────────
+// ── Boot-time seam validation ────────────────────────────────────────────────
 async function runProof(): Promise<void> {
     const probe = PROOF_CHALLENGE;
 
@@ -248,17 +248,17 @@ async function main(): Promise<void> {
     setLoadingStatus('Loading Pyodide…');
     await initPyodide();
 
-    setLoadingStatus('Running crypto proof…');
+    setLoadingStatus('Running seam validation…');
     showApp();
     installProfileHandlers();
 
-    setStatus('running proof');
+    setStatus('running crypto seam check');
     await runProof();
 
-    setStatus('running fortweb storage proof');
+    setStatus('running fortweb storage seam check');
     await runFortwebStorageProof();
 
-    setStatus('done', 'done');
+    setStatus('seam validation ready', 'done');
     postToBridge({ type: 'lifecycle', timestamp: isoNow(), message: 'done' });
 }
 
