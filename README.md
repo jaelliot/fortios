@@ -13,8 +13,8 @@ The repo currently supports two payload sources through the same iOS host workfl
 
 | Payload source | Status | How to stage it |
 |-------|--------|----------------|
-| `fortweb` | Mainline convergence lane for the thin-wrapper target | `PAYLOAD_SOURCE=fortweb make sync` or `make sync-fortweb` |
-| `fort-ios` | Legacy proof-harness lane kept for seam validation and reference | `make sync` |
+| `fortweb` | Mainline convergence lane for the thin-wrapper target; now the default host path | `make sync` or `make sync-fortweb` |
+| `fort-ios` | Legacy proof-harness lane kept for seam validation and reference | `PAYLOAD_SOURCE=fort-ios make sync` |
 
 For current thin-wrapper convergence work, treat `fortweb` as the intended hosted product payload. The `fort-ios` payload remains useful for local bridge and worker validation, but it is not the product-path source of truth.
 
@@ -86,8 +86,9 @@ After these three steps the project is ready to build.
 make ios-doctor
 
 # 2. Stage the payload you want to host in iOS
-make sync-fortweb              # preferred for convergence work
-make sync                       # legacy proof-harness path (PAYLOAD_SOURCE=fort-ios)
+make sync                       # default: FortWeb convergence path
+make sync-fortweb              # explicit alias for the same FortWeb path
+PAYLOAD_SOURCE=fort-ios make sync  # legacy proof-harness path
 
 # 3. Run the fast local checks
 make lint                      # SwiftLint (Swift sources)
@@ -108,7 +109,7 @@ make logs-sim
 make logs-device DEVICE_REF=<udid-or-name>
 ```
 
-Use `PAYLOAD_SOURCE=fortweb` with the wrapper targets for convergence work and thin-wrapper validation, for example `PAYLOAD_SOURCE=fortweb make dev-sim`.
+The default wrapper targets now stage FortWeb automatically. Use `PAYLOAD_SOURCE=fort-ios` only when you intentionally want the legacy proof harness, for example `PAYLOAD_SOURCE=fort-ios make dev-sim`.
 
 For conference acceptance and simulator/device parity runs, use [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](libs/Fort-ios/CONFERENCE-IOS-VALIDATION-CHECKLIST.md).
 
@@ -123,8 +124,8 @@ Run `make help` at any time to list all available targets.
 | `make help` | List all targets with descriptions |
 | `make setup` | Install Node dependencies (`npm ci`) |
 | `make pyodide` | Download Pyodide v0.29.1 runtime + crypto wheels into `public/pyodide/` |
-| `make sync` | Sync the selected payload source into `WebPayload/` (`PAYLOAD_SOURCE=fort-ios` by default, kept for the legacy proof harness) |
-| `make sync-fortweb` | Stage the FortWeb payload into `WebPayload/` for the mainline thin-wrapper convergence path |
+| `make sync` | Sync the selected payload source into `WebPayload/` (`PAYLOAD_SOURCE=fortweb` by default for the mainline thin-wrapper convergence path) |
+| `make sync-fortweb` | Stage the FortWeb payload into `WebPayload/` explicitly; equivalent to the default sync path |
 | `make ios-list-sims` | List available iOS Simulator destinations |
 | `make ios-list-devices` | List CoreDevice-visible physical devices |
 | `make ios-doctor` | Verify Xcode, simulator, and payload-source readiness |
@@ -186,10 +187,10 @@ The pipeline is split into two scripts:
 
 **`sync-payload.sh`** (iOS-specific, invoked by `make sync`) supports two modes:
 
-- `PAYLOAD_SOURCE=fortweb`: mainline convergence path; copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, then writes a root redirect page for the iOS host
+- `PAYLOAD_SOURCE=fortweb`: default mainline convergence path; copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, then writes a root redirect page for the iOS host
 - `PAYLOAD_SOURCE=fort-ios`: legacy proof-harness path; sources `build-payload.sh`, then stages the local Fort-ios payload
 
-In the default `fort-ios` mode it then:
+In the `fort-ios` mode it then:
 
 3. Sanitises `python_stdlib.zip` — replaces `itms-services` with `itms_services` in `urllib/parse.py` (prevents automated App Store rejection).
 4. Cleans stale files from `WebPayload/`.

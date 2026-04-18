@@ -3,7 +3,7 @@
 XCODE_PROJECT := xcodeproj/KeriWallet/KeriWallet.xcodeproj
 SCHEME        := KeriWallet
 APP_BUNDLE_ID := com.kerifoundation.wallet
-PAYLOAD_SOURCE ?= fort-ios
+PAYLOAD_SOURCE ?= fortweb
 FORTWEB_DIR   ?= ../fortweb
 SIMULATOR_NAME ?= iPhone 17 Pro
 SIMULATOR     := platform=iOS Simulator,name=$(SIMULATOR_NAME)
@@ -51,7 +51,7 @@ lint-ts: ## Run TypeScript type check (tsc --noEmit)
 
 # ── iOS-only targets ──────────────────────────────────────────────────────────
 
-sync: ## Build and sync the selected payload source (default: legacy fort-ios proof harness)
+sync: ## Build and sync the selected payload source (default: FortWeb convergence path)
 	PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
 sync-fortweb: ## Sync the FortWeb payload into WebPayload/ for the mainline convergence path
