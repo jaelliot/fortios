@@ -8,7 +8,7 @@
 #   1. Validates package-lock.json + Node version
 #   2. Runs npm ci && npm run build:ci
 #   3. Bundles public/pyodide/ → dist/pyodide/
-#   4. Bundles keriwasm Python shims → dist/python/
+#   4. Bundles fortweb Python shims → dist/python/
 #   5. Validates dist/build-manifest.json
 #
 # Platform-specific post-processing (e.g. itms-services sanitization for iOS,
@@ -80,38 +80,40 @@ echo "[build-payload] bundling pyodide assets → dist/pyodide/"
 cp -R "${PYODIDE_SRC_DIR}/" "${PAYLOAD_DIR}/dist/pyodide/"
 echo "[build-payload] pyodide bundle ok ($(du -sh "${PAYLOAD_DIR}/dist/pyodide" | cut -f1))"
 
-# ── Step 5: Bundle keriwasm Python shims ──────────────────────────────────────
+# ── Step 5: Bundle fortweb Python shims ──────────────────────────────────
 # Compatibility shims (pysodium, lmdb), the IndexedDB backend, and the hio
-# subset live in keriwasm/python/ — the single source of truth for all Pyodide
+# subset live in fortweb/app/runtime/ — the single source of truth for all Pyodide
 # Python files.  We cherry-pick only the files needed at runtime.
-KERIWASM_PYTHON_DIR="${SCRIPT_DIR}/../keriwasm/python"
-PYTHON_FILES=(indexeddb_python.py)
+FORTWEB_PYTHON_DIR="${SCRIPT_DIR}/../fortweb/app/runtime"
+PYTHON_FILES=(indexeddb_python.py pysodium.py lmdb.py)
 
-if [[ ! -d "${KERIWASM_PYTHON_DIR}" ]]; then
-  echo "error: keriwasm/python/ not found at ${KERIWASM_PYTHON_DIR}" 1>&2
-  echo "       Ensure libs/keriwasm is checked out alongside Fort-ios" 1>&2
+if [[ ! -d "${FORTWEB_PYTHON_DIR}" ]]; then
+  echo "error: fortweb/app/runtime/ not found at ${FORTWEB_PYTHON_DIR}" 1>&2
+  echo "       Ensure libs/fortweb is checked out alongside Fort-ios" 1>&2
   exit 1
 fi
 
 mkdir -p "${PAYLOAD_DIST_DIR}/python"
 for pyfile in "${PYTHON_FILES[@]}"; do
-  src="${KERIWASM_PYTHON_DIR}/${pyfile}"
+  src="${FORTWEB_PYTHON_DIR}/${pyfile}"
   if [[ ! -f "${src}" ]]; then
-    echo "error: required Python shim not found: ${src}" 1>&2
-    exit 1
+    echo "warning: Python shim not found in fortweb: ${src}" 1>&2
+  else
+    cp "${src}" "${PAYLOAD_DIST_DIR}/python/${pyfile}"
   fi
-  cp "${src}" "${PAYLOAD_DIST_DIR}/python/${pyfile}"
 done
 
-# Fallback compatibility shims are generated locally because modern keriwasm
-# no longer carries standalone pysodium.py and lmdb.py files.
-cat > "${PAYLOAD_DIST_DIR}/python/pysodium.py" <<'PY'
+# Generate fallback compatibility shims for pysodium and lmdb if not found in fortweb
+if [[ ! -f "${PAYLOAD_DIST_DIR}/python/pysodium.py" ]]; then
+  cat > "${PAYLOAD_DIST_DIR}/python/pysodium.py" <<'PY'
 """Compatibility shim mapping pysodium imports to pychloride."""
 
 from pychloride import *  # noqa: F401,F403
 PY
+fi
 
-cat > "${PAYLOAD_DIST_DIR}/python/lmdb.py" <<'PY'
+if [[ ! -f "${PAYLOAD_DIST_DIR}/python/lmdb.py" ]]; then
+  cat > "${PAYLOAD_DIST_DIR}/python/lmdb.py" <<'PY'
 """LMDB placeholder shim for Pyodide payloads using IndexedDB persistence."""
 
 class Error(Exception):
@@ -121,9 +123,10 @@ class Error(Exception):
 def open(*_args, **_kwargs):
     raise Error("lmdb shim: persistent storage is provided by indexeddb_python")
 PY
+fi
 
 # Bundle hio subset (required for keripy imports: doing, decking, ogling, etc.)
-HIO_SRC_DIR="${KERIWASM_PYTHON_DIR}/hio"
+HIO_SRC_DIR="${FORTWEB_PYTHON_DIR}/hio"
 if [[ -d "${HIO_SRC_DIR}" ]]; then
   cp -R "${HIO_SRC_DIR}" "${PAYLOAD_DIST_DIR}/python/hio"
   HIO_COUNT=$(find "${PAYLOAD_DIST_DIR}/python/hio" -name '*.py' | wc -l | tr -d ' ')
@@ -152,7 +155,7 @@ else
 fi
 
 TOTAL_PY=$(find "${PAYLOAD_DIST_DIR}/python" -name '*.py' | wc -l | tr -d ' ')
-echo "[build-payload] keriwasm python shims → dist/python/ (${TOTAL_PY} files total)"
+echo "[build-payload] fortweb python shims → dist/python/ (${TOTAL_PY} files total)"
 
 # ── Step 6: Validate manifest ─────────────────────────────────────────────────
 if [[ ! -f "${MANIFEST_PATH}" ]]; then

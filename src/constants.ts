@@ -72,4 +72,4 @@ export function fortwebVaultWorkerStore(
 
 // ── Demo / Proof ─────────────────────────────────────────────────────────────
 /** Challenge string used in the boot-time proof-of-concept crypto cycle. */
-export const PROOF_CHALLENGE = 'keriwasm proof vector v1';
+export const PROOF_CHALLENGE = 'fortweb proof vector v1';
