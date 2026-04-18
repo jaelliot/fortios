@@ -4,8 +4,8 @@
 # iOS-specific payload sync entrypoint.
 #
 # Supports two payload sources:
-#   1. fort-ios  — local Vite/TypeScript payload built via build-payload.sh
-#   2. fortweb   — static FortWeb payload copied into WebPayload/fortweb/
+#   1. fortweb   - mainline convergence path copied into WebPayload/fortweb/
+#   2. fort-ios  - legacy local Vite/TypeScript proof harness built via build-payload.sh
 
 set -euo pipefail
 

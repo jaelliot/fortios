@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-KERIWASM_DIR="$(cd "${PAYLOAD_DIR}/../../libs/keriwasm" && pwd)"
+FORTWEB_DIR="$(cd "${PAYLOAD_DIR}/../../libs/fortweb" && pwd)"
 
 OUT_DIR="${PAYLOAD_DIR}/public/pyodide"
 WHEELS_DIR="${OUT_DIR}/wheels"
@@ -70,11 +70,11 @@ for FILE in "${CORE_FILES[@]}"; do
   info "downloaded ${FILE} (${SIZE})"
 done
 
-# ── 2. blake3 wheel — copy from keriwasm/static/ ─────────────────────────────
+# ── 2. blake3 wheel - copy from fortweb/wheels/ ──────────────────────────────
 echo ""
 echo "=== Crypto wheels ==="
 BLAKE3_WHEEL="blake3-1.0.8-cp313-cp313-pyodide_2025_0_wasm32.whl"
-BLAKE3_SRC="${KERIWASM_DIR}/static/${BLAKE3_WHEEL}"
+BLAKE3_SRC="${FORTWEB_DIR}/wheels/${BLAKE3_WHEEL}"
 BLAKE3_DEST="${WHEELS_DIR}/${BLAKE3_WHEEL}"
 
 if [[ -f "${BLAKE3_DEST}" ]] && [[ "${FORCE}" == "false" ]]; then
@@ -82,7 +82,7 @@ if [[ -f "${BLAKE3_DEST}" ]] && [[ "${FORCE}" == "false" ]]; then
 else
   if [[ ! -f "${BLAKE3_SRC}" ]]; then
     error "blake3 wheel not found at ${BLAKE3_SRC}"
-    error "Ensure libs/keriwasm is cloned (run Devtools/python-env/setup-envrc)"
+    error "Ensure libs/fortweb is cloned (run git clone git@github.com:keri-foundation/fortweb.git libs/fortweb)"
     exit 1
   fi
   cp "${BLAKE3_SRC}" "${BLAKE3_DEST}"

@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// These tests currently validate the local proof harness and bridge seam.
+// They should not be treated as end-to-end proof that the FortWeb-hosted
+// product path is green on iOS.
+
 // ── Structural smoke tests ───────────────────────────────────────────────────
 //
 // These tests verify that the built Vite payload:

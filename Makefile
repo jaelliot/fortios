@@ -51,10 +51,10 @@ lint-ts: ## Run TypeScript type check (tsc --noEmit)
 
 # ── iOS-only targets ──────────────────────────────────────────────────────────
 
-sync: ## Build web payload and sync dist/ → WebPayload/
+sync: ## Build and sync the selected payload source (default: legacy fort-ios proof harness)
 	PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
-sync-fortweb: ## Sync the FortWeb payload into WebPayload/ for iOS hosting tests
+sync-fortweb: ## Sync the FortWeb payload into WebPayload/ for the mainline convergence path
 	PAYLOAD_SOURCE=fortweb FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
 ios-list-sims: ## List available iOS Simulator destinations

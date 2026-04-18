@@ -18,6 +18,9 @@ import {
     sendToWorker,
 } from './keri_runtime';
 
+// Legacy proof-harness entry point. This file is still useful for worker-seam
+// validation, but it is not the authoritative FortWeb-hosted product path.
+
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 const loadingEl = document.getElementById('loading');
 const loadingStatusEl = document.getElementById('loading-status');
