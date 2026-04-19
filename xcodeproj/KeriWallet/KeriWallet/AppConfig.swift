@@ -119,9 +119,9 @@ enum AppConfig {
         // Dark mode: --bg-dark: #0d0d0f  → RGB(13, 13, 15)
         static let darkBackground = UIColor(
             red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 15.0 / 255.0, alpha: 1)
-        // Light mode: --bg-light: #f5f5f7 → RGB(245, 245, 247)
+        // Light mode: --ref-neutral-10: #f7f8f4 → RGB(247, 248, 244)
         static let lightBackground = UIColor(
-            red: 245.0 / 255.0, green: 245.0 / 255.0, blue: 247.0 / 255.0, alpha: 1)
+            red: 247.0 / 255.0, green: 248.0 / 255.0, blue: 244.0 / 255.0, alpha: 1)
     }
 
     // MARK: - Host Appearance

@@ -65,8 +65,9 @@ final class WebContainerViewController: UIViewController {
         view.addSubview(webView)
 
         NSLayoutConstraint.activate([
-            // Full-bleed: CSS env(safe-area-inset-top) handles the Dynamic Island gap.
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            // UIKit safe area handles the Dynamic Island / status bar gap natively.
+            // The native view.backgroundColor fills behind the status bar.
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
