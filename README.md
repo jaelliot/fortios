@@ -9,6 +9,19 @@
 
 The two layers communicate through a typed JS↔Swift bridge (`bridge-contract.json`). The web payload is bundled at build time and served entirely from the app bundle — no network fetches at runtime.
 
+## Current transition note
+
+Current operational reality and target architecture differ.
+
+- Today, the live local scripts still build from the Fort-ios-local payload surface and stage generated output into `WebPayload/`.
+- Today, wrapper deployment defaults to the FortWeb shared-payload path, while the Fort-ios-local payload remains available only behind `PAYLOAD_SOURCE=fort-ios` as a blocked seam-validation lane.
+- The Fort-ios-local payload is now explicitly treated as a blocked proof-shell producer for wrapper deployment. `sync-payload.sh` and the Android refresh script fail closed if the generated manifest still reports `producer = fort-ios-local` or `payload_profile = proof-shell`, or if proof-shell markers remain in the generated payload.
+- The Fort-ios-local Pyodide seam now assumes the upstream Pyodide 0.29 module contract: the worker is spawned as a module worker and loads `pyodide.mjs`. `build-payload.sh` runs a compatibility check before bundling so classic-worker or ESM-asset drift fails early.
+- The target architecture remains one canonical shared web payload consumed by thin native wrappers.
+- Treat `WebPayload/` as generated output only. Never edit it by hand.
+- Treat the Fort-ios-local `src/` and `index.html` product surface as a transition or proof-shell lane until the shared-payload stabilization work is completed.
+- The active stabilization direction is to move the wrappers onto one canonical shared payload baseline, likely FortWeb, and keep wrapper bundle directories generated and disposable.
+
 ---
 
 ## Table of Contents
@@ -116,7 +129,9 @@ Run `make help` at any time to list all available targets.
 | `make help` | List all targets with descriptions |
 | `make setup` | Install Node dependencies (`npm ci`) |
 | `make pyodide` | Download Pyodide v0.29.1 runtime + crypto wheels into `public/pyodide/` |
-| `make sync` | Build web payload (`build:ci`) and copy `dist/` → `WebPayload/` |
+| `make sync` | Default wrapper packaging path: stage the FortWeb bundle into `WebPayload/` |
+| `make sync-fortweb` | Explicitly stage the FortWeb bundle into `WebPayload/` |
+| `make sync-fortios` | Run the blocked Fort-ios-local proof-shell lane (expected to fail closed for wrapper deployment) |
 | `make build` | `xcodebuild` — build KeriWallet for iOS Simulator (Debug) |
 | `make open` | Open `KeriWallet.xcodeproj` in Xcode |
 | `make lint` | Run SwiftLint with `--strict` on all Swift sources |
@@ -161,19 +176,25 @@ src/ + public/pyodide/  →  npm run build:ci  →  dist/  →  sync-payload.sh 
 
 The pipeline is split into two scripts:
 
+**Current-state note:** `make sync` now targets the FortWeb convergence path by default. The Fort-ios-local proof harness still exists for seam validation, but wrapper deployment should treat it as a blocked legacy producer.
+
 **`build-payload.sh`** (shared, platform-agnostic core):
 
 1. Runs `npm ci && npm run build:ci` to produce a deterministic `dist/`.
 2. Verifies `dist/build-manifest.json` exists and has the required fields.
 
-**`sync-payload.sh`** (iOS-specific, invoked by `make sync`) sources `build-payload.sh`, then:
+**`sync-payload.sh`** (iOS-specific, invoked by `make sync`) supports two modes:
 
-3. Sanitises `python_stdlib.zip` — replaces `itms-services` with `itms_services` in `urllib/parse.py` (prevents automated App Store rejection).
-4. Cleans stale files from `WebPayload/`.
-5. Copies `dist/` contents into `WebPayload/`.
-6. Prints a summary (git SHA, file count).
+- `PAYLOAD_SOURCE=fortweb`: default mainline convergence path; copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, writes a root redirect page, and generates a bundle manifest with producer/runtime provenance.
+- `PAYLOAD_SOURCE=fort-ios`: legacy proof-harness path; sources `build-payload.sh`, sanitises `python_stdlib.zip`, validates the blocked proof-shell contract, and then stages the local Vite output only if the guardrails permit it.
 
-> **Rule:** Always run `make sync` after changing TypeScript source. Never manually edit `WebPayload/`.
+Useful targets:
+
+- `make sync`: FortWeb default
+- `make sync-fortweb`: explicit FortWeb packaging path
+- `make sync-fortios`: explicit legacy proof-shell path, expected to fail closed for wrapper deployment
+
+> **Rule:** Always run the appropriate sync target after changing payload source files. Never manually edit `WebPayload/`.
 
 ### Determinism contract
 
@@ -212,7 +233,7 @@ make test-ts           # single pass (~100 ms)
 npm run test:watch     # watch mode
 ```
 
-Files: `src/__tests__/worker_router.test.ts` (12 tests), `src/__tests__/constants.test.ts` (12 tests).
+Files: `src/__tests__/worker_router.test.ts`, `src/__tests__/constants.test.ts`, `src/__tests__/bridge_adapter.test.ts`, `tools/__tests__/payload-tooling.test.mjs`.
 
 ### Layer 3 — Playwright E2E tests
 
@@ -289,13 +310,10 @@ Fort-ios/
 │   └── KeriWallet/
 │       ├── KeriWallet/         # Mirror of KeriWallet/ above (symlinked)
 │       └── KeriWallet.xcodeproj
-├── WebPayload/                 # Synced dist/ output — Xcode bundles this
-├── WebPayloadOverride/         # Debug-only local override (NOT YET IMPLEMENTED)
+├── WebPayload/                 # Generated wrapper bundle directory — Xcode bundles this
 ├── Config/
 │   ├── Debug.xcconfig
 │   └── Release.xcconfig
-├── generated/
-│   └── BridgeContract.kt       # Generated Kotlin constants (for Fort-android)
 ├── docs/
 │   ├── adr/                    # Architecture Decision Records (ADR-022 → ADR-031)
 │   └── instructions/           # Coding standards and how-to guides
@@ -352,7 +370,7 @@ Two issues arise from the bundled Pyodide payload. Both are handled automaticall
 
 ### `itms-services` string in `python_stdlib.zip`
 
-`urllib/parse.py` inside the bundled `python_stdlib.zip` contains the string `itms-services`, which triggers Apple's automated binary scanner and causes App Store rejection. `sync-payload.sh` patches this during sync by replacing `itms-services` → `itms_services` in the zip in place.
+`urllib/parse.py` inside the Fort-ios-local `python_stdlib.zip` contains the string `itms-services`, which triggers Apple's automated binary scanner and causes App Store rejection. `sync-payload.sh` only applies this patch in the blocked `PAYLOAD_SOURCE=fort-ios` seam-validation lane.
 
 To verify the patch was applied:
 

@@ -17,6 +17,8 @@ APP_BUNDLE_ID := com.kerifoundation.wallet
 SIM_APP       := $(DERIVED_DATA_SIM)/Build/Products/Debug-iphonesimulator/KeriWallet.app
 DEVICE_APP    := $(DERIVED_DATA_DEVICE)/Build/Products/Debug-iphoneos/KeriWallet.app
 PAYLOAD_MANIFEST := WebPayload/build-manifest.json
+PAYLOAD_SOURCE ?= fortweb
+FORTWEB_DIR ?= ../fortweb
 
 ifneq ($(strip $(SIMULATOR_UDID)),)
 SIMULATOR_DEST := platform=iOS Simulator,id=$(SIMULATOR_UDID),arch=arm64
@@ -64,8 +66,14 @@ lint-ts: ## Run TypeScript type check (tsc --noEmit)
 
 # ── iOS-only targets ──────────────────────────────────────────────────────────
 
-sync: ## Build web payload and sync dist/ → WebPayload/
-	./sync-payload.sh
+sync: ## Build and sync the selected payload source (default: FortWeb convergence path)
+	PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
+
+sync-fortweb: ## Sync the FortWeb payload into WebPayload/ for the mainline convergence path
+	PAYLOAD_SOURCE=fortweb FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
+
+sync-fortios: ## Sync the blocked local Fort-ios proof shell into WebPayload/ (expected to fail closed)
+	PAYLOAD_SOURCE=fort-ios FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
 ios-doctor: ## Show local Xcode, simulator, and physical-device readiness
 	@echo "Selected simulator destination: $(SIMULATOR_DEST)"
