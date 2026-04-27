@@ -311,11 +311,27 @@ async function listIdentifiers(): Promise<void> {
         if (isDelegated) tags.push('delegated');
         if (authPending) tags.push('⚠ auth pending');
 
-        li.innerHTML = `
-            <div class="id-alias">${name}${tags.length > 0 ? ` <small>(${tags.join(', ')})</small>` : ''}</div>
-            <div class="id-prefix">${prefix}</div>
-            <div class="id-state">${namespace} · seq ${seqNo} · threshold ${sigThreshold}</div>
-        `;
+        const aliasEl = document.createElement('div');
+        aliasEl.className = 'id-alias';
+        aliasEl.textContent = name;
+
+        if (tags.length > 0) {
+            aliasEl.appendChild(document.createTextNode(' '));
+
+            const tagsEl = document.createElement('small');
+            tagsEl.textContent = `(${tags.join(', ')})`;
+            aliasEl.appendChild(tagsEl);
+        }
+
+        const prefixEl = document.createElement('div');
+        prefixEl.className = 'id-prefix';
+        prefixEl.textContent = prefix;
+
+        const stateEl = document.createElement('div');
+        stateEl.className = 'id-state';
+        stateEl.textContent = `${namespace} · seq ${seqNo} · threshold ${sigThreshold}`;
+
+        li.append(aliasEl, prefixEl, stateEl);
         idListEl?.appendChild(li);
     }
 
