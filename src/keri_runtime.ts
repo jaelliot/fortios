@@ -8,7 +8,6 @@
 
 import { createBridgeAdapter } from './bridge_adapter';
 import { WORKER_ID_PREFIX } from './constants';
-import PyodideWorker from './pyodide_worker?worker';
 import type { BridgeAdapter, BridgeEnvelope, NativeCommand, WorkerInbound, WorkerOutbound } from './types';
 
 // ── Bridge adapter (platform-agnostic) ────────────────────────────────────────
@@ -49,7 +48,7 @@ export function installGlobalErrorHooks(): void {
 }
 
 // ── Worker management ─────────────────────────────────────────────────────────
-let worker: InstanceType<typeof PyodideWorker> | null = null;
+let worker: Worker | null = null;
 
 type PendingEntry = { resolve: (v: WorkerOutbound) => void; reject: (e: Error) => void };
 const pending = new Map<string, PendingEntry>();
@@ -76,8 +75,20 @@ export function sendToWorker(cmd: WorkerInbound): Promise<WorkerOutbound> {
     });
 }
 
+function createPyodideWorker(): Worker {
+    try {
+        return new Worker(new URL('./pyodide_worker.ts', import.meta.url), {
+            name: 'pyodide-worker',
+            type: 'module',
+        });
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Pyodide requires module Web Worker support in the current WebView: ${detail}`);
+    }
+}
+
 export async function initPyodide(): Promise<void> {
-    worker = new PyodideWorker();
+    worker = createPyodideWorker();
 
     worker.onerror = (ev: ErrorEvent) => {
         _logCallback?.(`[worker error] ${ev.message}`);

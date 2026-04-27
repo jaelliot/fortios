@@ -18,6 +18,7 @@ CDN_BASE="https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full"
 
 # Core runtime files required by loadPyodide()
 CORE_FILES=(
+  "pyodide.mjs"
   "pyodide.js"
   "pyodide.asm.wasm"
   "pyodide.asm.js"
