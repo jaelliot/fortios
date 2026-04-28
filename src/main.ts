@@ -356,6 +356,81 @@ function installIdentifierHandlers(): void {
     setIdStatus('Tap "Seed Test Data" then "List Identifiers".');
 }
 
+async function putWorkerValue(store: string, key: string, value: string): Promise<void> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_put', store, key, value });
+    if (result.type !== 'db_put_result' || !result.ok) {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+}
+
+async function getWorkerValue(store: string, key: string): Promise<string | null> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_get', store, key });
+    if (result.type !== 'db_get_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+    return result.value;
+}
+
+async function listWorkerValues(store: string, prefix: string): Promise<Array<{ key: string; value: string }>> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_list', store, prefix });
+    if (result.type !== 'db_list_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+    return result.entries;
+}
+
+async function deleteWorkerValue(store: string, key: string): Promise<void> {
+    const result = await sendToWorker({ id: generateId(), type: 'db_del', store, key });
+    if (result.type !== 'db_del_result') {
+        throw new Error(result.type === 'error' ? result.error : `unexpected worker result: ${result.type}`);
+    }
+}
+
+// Validate one real FortWeb storage slice on the live worker seam: registry entry
+// plus per-vault key-state data using the same naming model FortWeb uses.
+async function runFortwebStorageProof(): Promise<void> {
+    const vaultId = 'proof-alpha';
+    const registryStore = fortwebRegistryWorkerStore();
+    const vaultStateStore = fortwebVaultWorkerStore(vaultId);
+    const createdAt = isoNow();
+    const registryValue = JSON.stringify({
+        id: vaultId,
+        alias: 'Proof Alpha',
+        storageName: fortwebVaultStorageName(vaultId),
+        runtimeMode: 'pyodide-worker',
+        createdAt,
+    });
+    const stateValue = JSON.stringify({
+        status: 'ready',
+        vaultId,
+        updatedAt: createdAt,
+    });
+
+    log(`fortweb storage seam check: registry=${registryStore} vaultState=${vaultStateStore}`);
+
+    try {
+        await putWorkerValue(registryStore, vaultId, registryValue);
+        await putWorkerValue(vaultStateStore, 'state', stateValue);
+
+        const registryEntries = await listWorkerValues(registryStore, '');
+        const registryEntry = registryEntries.find((entry) => entry.key === vaultId);
+        if (!registryEntry || registryEntry.value !== registryValue) {
+            throw new Error(`FortWeb registry seam check failed for ${FORTWEB_REGISTRY_STORE}${vaultId}`);
+        }
+
+        const loadedState = await getWorkerValue(vaultStateStore, 'state');
+        if (loadedState !== stateValue) {
+            throw new Error(`FortWeb vault state seam check failed for ${FORTWEB_KF_STATE_SUBDB}state`);
+        }
+
+        log(`fortweb storage seam check: registry + ${FORTWEB_KF_STATE_SUBDB} state round-trip ok`);
+    } finally {
+        await deleteWorkerValue(vaultStateStore, 'state');
+        await deleteWorkerValue(registryStore, vaultId);
+        log('fortweb storage seam check: cleaned validation records');
+    }
+}
+
 // ── Boot-time proof ───────────────────────────────────────────────────────────
 async function runProof(): Promise<void> {
     const probe = PROOF_CHALLENGE;

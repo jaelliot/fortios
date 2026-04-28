@@ -25,38 +25,14 @@ function makeMockPyodide(runPythonAsyncImpl?: (code: string) => Promise<unknown>
 
 // ── Mock KVFactory ───────────────────────────────────────────────────────────
 
-function makeMockKVFactory(backing: Record<string, string> = {}): KVFactory {
-    const cache = new Map<string, WorkerKV>();
-
-    function makeKV(storeName: string): WorkerKV {
-        const prefix = `${storeName}/`;
-        return {
-            get: vi.fn(async (key: string) => backing[prefix + key] ?? null),
-            set: vi.fn(async (key: string, value: string) => { backing[prefix + key] = value; }),
-            del: vi.fn(async (key: string) => {
-                const fullKey = prefix + key;
-                const existed = fullKey in backing;
-                delete backing[fullKey];
-                return existed;
-            }),
-            list: vi.fn(async (scanPrefix: string) => {
-                const fullPrefix = prefix + scanPrefix;
-                return Object.entries(backing)
-                    .filter(([k]) => k.startsWith(fullPrefix))
-                    .map(([k, v]) => ({ key: k.slice(prefix.length), value: v }));
-            }),
-            close: vi.fn(),
-        };
-    }
-
+function makeMockKV(store: Record<string, string> = {}): WorkerKV {
     return {
-        kv: vi.fn((storeName: string) => {
-            let instance = cache.get(storeName);
-            if (!instance) {
-                instance = makeKV(storeName);
-                cache.set(storeName, instance);
-            }
-            return instance;
+        get: vi.fn(async (key: string) => store[key] ?? null),
+        set: vi.fn(async (key: string, value: string) => { store[key] = value; }),
+        del: vi.fn(async (key: string) => {
+            const existed = key in store;
+            delete store[key];
+            return existed;
         }),
         list: vi.fn(async (prefix: string) => Object.entries(store)
             .filter(([key]) => key.startsWith(prefix))
@@ -65,20 +41,46 @@ function makeMockKVFactory(backing: Record<string, string> = {}): KVFactory {
     };
 }
 
-function makeMockKVFactory(stores: Record<string, Record<string, string>> = {}): KVFactory {
+function normalizeMockStores(
+    seed?: Record<string, Record<string, string>> | Record<string, string>,
+): Record<string, Record<string, string>> {
+    if (!seed || Object.keys(seed).length === 0) {
+        return {};
+    }
+    const firstVal = Object.values(seed)[0];
+    if (typeof firstVal === 'object' && firstVal !== null && !Array.isArray(firstVal)) {
+        return { ...(seed as Record<string, Record<string, string>>) };
+    }
+    const out: Record<string, Record<string, string>> = {};
+    for (const [compositeKey, val] of Object.entries(seed as Record<string, string>)) {
+        const slash = compositeKey.indexOf('/');
+        if (slash === -1) {
+            throw new Error(`makeMockKVFactory flat seed keys must be store/key, got: ${compositeKey}`);
+        }
+        const storeName = compositeKey.slice(0, slash);
+        const key = compositeKey.slice(slash + 1);
+        if (!out[storeName]) out[storeName] = {};
+        out[storeName][key] = val;
+    }
+    return out;
+}
+
+function makeMockKVFactory(
+    seed?: Record<string, Record<string, string>> | Record<string, string>,
+): KVFactory {
+    const stores = normalizeMockStores(seed);
     const cache = new Map<string, WorkerKV>();
-
-    const factory = ((store: string) => {
-        const existing = cache.get(store);
-        if (existing) return existing;
-
-        const kv = makeMockKV(stores[store] ?? (stores[store] = {}));
-        cache.set(store, kv);
-        return kv;
-    }) as KVFactory;
-
-    factory.close = vi.fn();
-    return factory;
+    return {
+        kv(store: string): WorkerKV {
+            let existing = cache.get(store);
+            if (!existing) {
+                existing = makeMockKV(stores[store] ?? (stores[store] = {}));
+                cache.set(store, existing);
+            }
+            return existing;
+        },
+        close: vi.fn(),
+    };
 }
 
 // ── handleBlake3Hash ─────────────────────────────────────────────────────────
