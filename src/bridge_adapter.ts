@@ -4,7 +4,7 @@
 //
 // Platforms:
 //   iOS (WKWebView)   — window.webkit.messageHandlers.<name>.postMessage()
-//   Android (WebView)  — window.<handlerName>.postMessage(JSON.stringify())
+//   Android (WebView)  — window.AndroidBridge.postMessage(JSON.stringify())
 //   Fallback (browser) — silent no-op (messages dropped)
 //
 // This is the ONLY platform-detection code in the web payload. Everything
@@ -28,13 +28,12 @@ function createWebKitAdapter(): BridgeAdapter {
     };
 }
 
-/** Android: the host exposes a secure bridge object at `window.<handlerName>`. */
+/** Android: `addJavascriptInterface` exposes `window.AndroidBridge`. */
 function createAndroidAdapter(): BridgeAdapter {
     return {
         postMessage(payload: BridgeEnvelope): void {
-            const bridge = (window as unknown as Record<string, unknown>)[BRIDGE_HANDLER_NAME] as
-                | { postMessage?: (json: string) => void }
-                | undefined;
+            const bridge = (window as unknown as { AndroidBridge?: { postMessage: (json: string) => void } })
+                .AndroidBridge;
             if (bridge && typeof bridge.postMessage === 'function') {
                 bridge.postMessage(JSON.stringify(payload));
             }
@@ -56,8 +55,8 @@ export function createBridgeAdapter(): BridgeAdapter {
         if ((window as unknown as { webkit?: unknown }).webkit) {
             return createWebKitAdapter();
         }
-        // Android detection: the secure bridge is exposed at `window.<handlerName>`
-        if (BRIDGE_HANDLER_NAME in (window as unknown as Record<string, unknown>)) {
+        // Android detection: addJavascriptInterface injects `window.AndroidBridge`
+        if ((window as unknown as { AndroidBridge?: unknown }).AndroidBridge) {
             return createAndroidAdapter();
         }
     }
