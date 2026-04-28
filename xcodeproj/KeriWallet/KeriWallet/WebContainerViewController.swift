@@ -9,8 +9,7 @@ final class WebContainerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        overrideUserInterfaceStyle = AppConfig.Appearance.interfaceStyle
-        view.backgroundColor = AppConfig.Appearance.backgroundColor
+        view.backgroundColor = .systemBackground
 
         let userContentController = WKUserContentController()
 
@@ -21,16 +20,10 @@ final class WebContainerViewController: UIViewController {
         // Receive crypto operation results from Pyodide worker via JS bridge
         bridge.onCryptoResult = { [weak self] payload in
             _ = self  // suppress unused warning; callers can extend this
-            if let error = payload.error, !error.isEmpty {
-                AppLogger.warning(
-                    "[WebContainer] crypto_result id=\(payload.id) error",
-                    category: AppConfig.Log.webContainer)
-                return
-            }
-
-            AppLogger.debug(
-                "[WebContainer] crypto_result id=\(payload.id) ok",
-                category: AppConfig.Log.webContainer)
+            AppLogger.info(
+                "[WebContainer] crypto_result id=\(payload.id) error=\(payload.error ?? "nil")",
+                category: AppConfig.Log.webContainer
+            )
         }
 
         let config = WKWebViewConfiguration()
@@ -50,13 +43,13 @@ final class WebContainerViewController: UIViewController {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
-        webView.underPageBackgroundColor = AppConfig.Appearance.backgroundColor
+        webView.underPageBackgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? AppConfig.Brand.darkBackground
+                : AppConfig.Brand.lightBackground
+        }
         // CSS env(safe-area-inset-*) owns all insets — prevent UIKit double-counting.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // Keep visual scale at 1.0 so fixed tab bars align with hit testing (pinch/double-tap zoom otherwise offsets taps).
-        webView.scrollView.minimumZoomScale = 1.0
-        webView.scrollView.maximumZoomScale = 1.0
-        webView.scrollView.bouncesZoom = false
         #if DEBUG
             webView.isInspectable = true
         #endif
@@ -65,9 +58,8 @@ final class WebContainerViewController: UIViewController {
         view.addSubview(webView)
 
         NSLayoutConstraint.activate([
-            // UIKit safe area handles the Dynamic Island / status bar gap natively.
-            // The native view.backgroundColor fills behind the status bar.
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            // Full-bleed: CSS env(safe-area-inset-top) handles the Dynamic Island gap.
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
@@ -77,7 +69,7 @@ final class WebContainerViewController: UIViewController {
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        AppConfig.Appearance.statusBarStyle
+        traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
     }
 
     deinit {
@@ -92,10 +84,23 @@ final class WebContainerViewController: UIViewController {
             return
         }
 
-        AppLogger.notice(
-            "[WebContainer] loading initial payload entry=\(AppConfig.Scheme.entryURL)",
-            category: AppConfig.Log.webContainer)
+        AppLogger.info(
+            "[WebContainer] loading initial payload", category: AppConfig.Log.webContainer)
         webView.load(URLRequest(url: url))
+
+        // Demo: trigger a Swift-initiated crypto op after a delay.
+        // Pyodide boots asynchronously in the Web Worker; the delay is conservative
+        // for Debug builds on the Simulator. In production, drive this from
+        // a lifecycle:done bridge message instead.
+        #if DEBUG
+            DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.Demo.cryptoDispatchDelay) { [weak self] in
+                self?.runCryptoOperation([
+                    "id": UUID().uuidString,
+                    "type": AppConfig.Demo.operationType,
+                    "data": AppConfig.Demo.hashData
+                ])
+            }
+        #endif
     }
 
     /// Dispatch a crypto operation to the Pyodide Web Worker via JS.
@@ -123,27 +128,10 @@ final class WebContainerViewController: UIViewController {
                 category: AppConfig.Log.webContainer)
             return
         }
-        let js = """
-        (function() {
-            if (typeof window.handleNativeCommand !== 'function') {
-                return '__bridge_missing__';
-            }
-            window.handleNativeCommand(\(json));
-            return '__bridge_called__';
-        })();
-        """
-
-        webView.evaluateJavaScript(js) { result, error in
+        webView.evaluateJavaScript("window.handleNativeCommand(\(json))") { _, error in
             if let error = error {
                 AppLogger.error(
                     "[WebContainer] evaluateJavaScript error: \(error)",
-                    category: AppConfig.Log.webContainer)
-                return
-            }
-
-            if let marker = result as? String, marker == "__bridge_missing__" {
-                AppLogger.warning(
-                    "[WebContainer] handleNativeCommand not available; skipping debug crypto dispatch",
                     category: AppConfig.Log.webContainer)
             }
         }
