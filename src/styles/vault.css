@@ -1,0 +1,168 @@
+/*
+ * Vault screen — KERI Wallet web payload
+ *
+ * Vault header, horizontal pill bar, vault pages, identifiers panel.
+ */
+
+/* ── Vault header ────────────────────────────────────────────────────── */
+.vault-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.vault-header-left {
+  display: grid;
+  gap: 2px;
+}
+
+.vault-header h1 {
+  font-size: var(--font-title-1);
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  color: var(--keri-gold);
+}
+
+.vault-header-meta {
+  font-size: var(--font-footnote);
+  color: var(--text-muted-dark);
+}
+
+.theme-light .vault-header-meta {
+  color: var(--text-muted-light);
+}
+
+/* ── Horizontal scrollable pill bar (vault sub-nav) ──────────────────── */
+.vault-pills {
+  display: flex;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: var(--space-xs) 0 var(--space-md) 0;
+  scroll-snap-type: x proximity;
+}
+
+.vault-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.vault-pill {
+  white-space: nowrap;
+  padding: 8px 18px;
+  min-height: 36px;
+  border: 1px solid var(--line-dark);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  border-radius: 20px;
+  font-size: var(--font-subhead);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+
+.theme-light .vault-pill {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: var(--line-light);
+}
+
+.vault-pill.active {
+  background: var(--keri-green);
+  border-color: var(--keri-green);
+  color: #fff;
+}
+
+.vault-pill:active {
+  opacity: 0.7;
+}
+
+/* ── Vault page content ──────────────────────────────────────────────── */
+.vault-content {
+  display: grid;
+}
+
+.vault-page {
+  display: none;
+}
+
+.vault-page.active {
+  display: grid;
+  gap: var(--space-md);
+  animation: fadeIn 0.15s ease;
+}
+
+/* ── Identifiers panel ───────────────────────────────────────────────── */
+.identifiers-panel {
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-dark);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.theme-light .identifiers-panel {
+  border-color: var(--line-light);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.identifiers-panel .section-title {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted-dark);
+  margin-bottom: var(--space-sm);
+}
+
+.theme-light .identifiers-panel .section-title {
+  color: var(--text-muted-light);
+}
+
+#id-status {
+  font-size: var(--font-footnote);
+  color: var(--text-muted-dark);
+}
+
+.theme-light #id-status {
+  color: var(--text-muted-light);
+}
+
+.id-list {
+  list-style: none;
+  margin-top: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.id-list li {
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.theme-light .id-list li {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: var(--line-light);
+}
+
+.id-alias {
+  font-size: var(--font-headline);
+  font-weight: 700;
+}
+
+.id-prefix,
+.id-state {
+  margin-top: 3px;
+  color: var(--text-muted-dark);
+  font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+  font-size: var(--font-caption);
+  word-break: break-all;
+}
+
+.theme-light .id-prefix,
+.theme-light .id-state {
+  color: var(--text-muted-light);
+}

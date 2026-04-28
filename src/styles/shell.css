@@ -1,0 +1,369 @@
+/*
+ * App shell chrome — KERI Wallet web payload
+ *
+ * Structural layout: loading screen, app container, compact header,
+ * scrollable workspace, bottom tab bar, screen transitions.
+ * These styles survive UI content changes — they are the durable skeleton.
+ */
+
+/* ── Loading screen ──────────────────────────────────────────────────── */
+#loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80dvh;
+  gap: var(--space-xl);
+  transition: opacity var(--fade-duration) ease-out;
+}
+
+#loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#loading img {
+  width: 88px;
+  height: 88px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+#loading-status {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-muted-dark);
+}
+
+.theme-light #loading-status {
+  color: var(--text-muted-light);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.62; transform: scale(0.96); }
+}
+
+/* ── App container ───────────────────────────────────────────────────── */
+#app {
+  display: none;
+}
+
+#app.visible {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* ── Header (fixed top) ──────────────────────────────────────────────── */
+.topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  height: var(--header-height);
+  padding: 0 var(--space-md);
+  padding-top: env(safe-area-inset-top);
+  background: rgba(13, 13, 15, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--line-dark);
+  z-index: 100;
+}
+
+.theme-light .topbar {
+  background: rgba(247, 244, 237, 0.82);
+  border-bottom-color: var(--line-light);
+}
+
+/* Add safe area to total header height when inset exists */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .topbar {
+    height: calc(var(--header-height) + env(safe-area-inset-top));
+  }
+}
+
+.brand-compact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.brand-compact img {
+  height: 28px;
+  width: 28px;
+}
+
+.brand-compact span {
+  font-size: var(--font-headline);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.header-trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  color: var(--text-muted-dark);
+  font-size: var(--font-footnote);
+  font-weight: 600;
+}
+
+.theme-light .status-row {
+  color: var(--text-muted-light);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--status-pending);
+  flex-shrink: 0;
+}
+
+.status-dot.done { background-color: var(--status-done); }
+.status-dot.error { background-color: var(--status-error); }
+
+/* ── Scrollable content area ─────────────────────────────────────────── */
+.workspace {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-md);
+  padding-left: max(var(--space-md), env(safe-area-inset-left));
+  padding-right: max(var(--space-md), env(safe-area-inset-right));
+}
+
+.workspace-inner {
+  width: min(600px, 100%);
+  margin: 0 auto;
+}
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Bottom tab bar (HIG: iOS tab bar) ───────────────────────────────── */
+.tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  height: var(--tab-bar-height);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(13, 13, 15, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--line-dark);
+  z-index: 100;
+}
+
+.theme-light .tab-bar {
+  background: rgba(247, 244, 237, 0.82);
+  border-top-color: var(--line-light);
+}
+
+/* Add safe area to total tab bar height */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .tab-bar {
+    height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+}
+
+.tab-bar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  border: none;
+  background: none;
+  color: var(--text-muted-dark);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  padding: 8px 0 2px;
+}
+
+.theme-light .tab-bar-item {
+  color: var(--text-muted-light);
+}
+
+.tab-bar-item.active {
+  color: var(--keri-green);
+}
+
+.tab-bar-item svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.tab-bar-item span {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* ── Shared element styles ───────────────────────────────────────────── */
+.section-kicker {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted-dark);
+}
+
+.theme-light .section-kicker {
+  color: var(--text-muted-light);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid var(--line-dark);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: var(--font-subhead);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.theme-light .btn {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: var(--line-light);
+}
+
+.btn:active {
+  opacity: 0.7;
+}
+
+.btn-primary {
+  background: var(--keri-green);
+  border-color: var(--keri-green);
+  color: #f8f4ee;
+}
+
+/* Primary keeps its green in all themes */
+.theme-light .btn-primary {
+  background: var(--keri-green);
+  border-color: var(--keri-green);
+  color: #f8f4ee;
+}
+
+.btn-primary:active {
+  opacity: 0.8;
+}
+
+.btn-row {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-ghost {
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.btn-ghost:active {
+  opacity: 0.6;
+}
+
+.btn-ghost svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.card {
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-dark);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (prefers-color-scheme: light) {
+  .card {
+    border-color: var(--line-light);
+    background: rgba(255, 255, 255, 0.52);
+  }
+}
+
+.card + .card {
+  margin-top: var(--space-sm);
+}
+
+.card strong {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--keri-green);
+}
+
+.card p {
+  color: var(--text-muted-dark);
+  font-size: var(--font-subhead);
+}
+
+@media (prefers-color-scheme: light) {
+  .card p {
+    color: var(--text-muted-light);
+  }
+}
+
+.page-header {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.page-header h2 {
+  font-size: var(--font-title-1);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.6px;
+}
+
+.page-header p,
+.placeholder-copy {
+  color: var(--text-muted-dark);
+  max-width: 64ch;
+  font-size: var(--font-subhead);
+}
+
+@media (prefers-color-scheme: light) {
+  .page-header p,
+  .placeholder-copy {
+    color: var(--text-muted-light);
+  }
+}

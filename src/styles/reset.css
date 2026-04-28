@@ -1,0 +1,57 @@
+/*
+ * CSS reset — KERI Wallet web payload
+ *
+ * Minimal reset for WKWebView. Sets box-sizing, removes default margins,
+ * configures body for full-viewport layout, and neutralizes tap highlights.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  color-scheme: dark light;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  height: 100dvh;
+}
+
+body {
+  background:
+    linear-gradient(140deg, rgba(97, 120, 62, 0.12), transparent 38%),
+    linear-gradient(210deg, rgba(152, 108, 50, 0.18), transparent 34%),
+    linear-gradient(180deg, #0d0d0f 0%, #141217 100%);
+  color: var(--text-dark);
+  height: 100dvh;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.5;
+  overflow: hidden;
+  /* Safe area insets handled by header/tab-bar, not body padding */
+  padding: 0;
+}
+
+.theme-light body {
+  background:
+    linear-gradient(145deg, rgba(97, 120, 62, 0.14), transparent 42%),
+    linear-gradient(220deg, rgba(152, 108, 50, 0.12), transparent 34%),
+    linear-gradient(180deg, #f7f4ed 0%, #ebe6db 100%);
+  color: var(--text-light);
+}
+
+a,
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  font: inherit;
+}
