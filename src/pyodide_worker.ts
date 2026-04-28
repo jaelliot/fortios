@@ -1,19 +1,21 @@
 /// <reference lib="webworker" />
 //
 // pyodide_worker.ts
-// Runs Pyodide in a classic Web Worker (IIFE bundle, no ES module imports at runtime).
+// Runs Pyodide in a module Web Worker and loads the bundled Pyodide ESM runtime.
 // Python ops: blake3 hashing, pychloride Ed25519 sign/verify.
 //
 // Type definitions and constants are imported from shared modules (types.ts, constants.ts)
-// and bundled by Vite at build time — the worker runtime uses importScripts only for Pyodide.
+// and bundled by Vite at build time. The Pyodide runtime itself stays external so
+// the bundled payload can copy the upstream files into dist/pyodide/ unchanged.
 
 import { BLAKE3_WHEEL, PYCHLORIDE_WHEEL, WORKER_LOG_ID } from './constants';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
 import type { KVFactory } from './worker_router';
 import { openIdbKVFactory, routeMessage } from './worker_router';
 
-// loadPyodide is injected into the worker scope at runtime via importScripts.
-declare function loadPyodide(opts: { indexURL: string }): Promise<PyodideInterface>;
+type PyodideModule = {
+    loadPyodide: (opts: { indexURL: string }) => Promise<PyodideInterface>;
+};
 
 // Populated on first 'init' message — not constants because blob workers
 // have no meaningful self.location.origin.
@@ -57,9 +59,10 @@ async function boot(origin: string): Promise<void> {
     wheelBase = `${origin}/pyodide/wheels/`;
     pythonBase = `${origin}/python/`;
 
-    // importScripts is synchronous — injects loadPyodide() into the worker scope.
-    workerLog('loading pyodide.js');
-    self.importScripts(`${pyodideBase}pyodide.js`);
+    workerLog('loading pyodide.mjs');
+    const { loadPyodide } = (await import(
+        /* @vite-ignore */ `${pyodideBase}pyodide.mjs`
+    )) as PyodideModule;
 
     workerLog('initializing pyodide runtime');
     pyodide = await loadPyodide({ indexURL: pyodideBase });
@@ -157,7 +160,6 @@ self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
     if (cmd.type === 'visibility_change') {
         if (cmd.hidden) {
             kvFactory?.close();
-            kvFactory = null;
             workerLog('visibility: hidden — closed IndexedDB');
         } else if (!kvFactory) {
             try {

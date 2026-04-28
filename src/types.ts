@@ -4,8 +4,8 @@
 // eliminating the previous copy-paste duplication.
 //
 // Message protocol (all carry `id: string` for correlation):
-//   IN  → Worker: init, blake3_hash, sign, verify, db_put, db_get, db_del, db_list
-//   OUT ← Worker: ready, blake3_result, sign_result, verify_result, db_* results, error, log
+//   IN  → Worker: init, blake3_hash, sign, verify
+//   OUT ← Worker: ready, blake3_result, sign_result, verify_result, error, log
 //   Bridge → Swift: js_error, unhandled_rejection, log, lifecycle, crypto_result
 
 // ── Worker inbound (main → worker) ───────────────────────────────────────────
@@ -54,7 +54,7 @@ export interface PyodideInterface {
  * Abstraction over the native bridge transport.
  *
  * - **iOS:** Uses `window.webkit.messageHandlers` (WKWebView).
- * - **Android:** Uses `window[BRIDGE_HANDLER_NAME].postMessage()` via the host-provided secure bridge object.
+ * - **Android:** Uses `window.AndroidBridge.postMessage()` (addJavascriptInterface).
  * - **Test/fallback:** No-op (messages are silently dropped).
  *
  * Injected at boot time via `initBridge()` in main.ts.
