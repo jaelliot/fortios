@@ -8,7 +8,7 @@
 #   1. Validates package-lock.json + Node version
 #   2. Runs npm ci && npm run build:ci
 #   3. Bundles public/pyodide/ → dist/pyodide/
-#   4. Bundles fortweb Python shims → dist/python/
+#   4. Bundles keriwasm Python shims → dist/python/
 #   5. Validates dist/build-manifest.json
 #
 # Platform-specific post-processing (e.g. itms-services sanitization for iOS,
@@ -61,7 +61,11 @@ if [[ -n "${REQUIRED_NODE_VERSION}" ]]; then
   fi
 fi
 
-# ── Step 3: Build ─────────────────────────────────────────────────────────────
+# ── Step 3: Fail-fast on worker/runtime mismatch ─────────────────────────────
+echo "[build-payload] validating pyodide worker/asset compatibility"
+node "${PAYLOAD_DIR}/tools/validate-pyodide-runtime.mjs"
+
+# ── Step 4: Build ─────────────────────────────────────────────────────────────
 echo "[build-payload] building web payload"
 (
   cd "${PAYLOAD_DIR}"
@@ -69,9 +73,9 @@ echo "[build-payload] building web payload"
   npm run build:ci
 )
 
-# ── Step 4: Bundle Pyodide assets ─────────────────────────────────────────────
+# ── Step 5: Bundle Pyodide assets ─────────────────────────────────────────────
 PYODIDE_SRC_DIR="${PAYLOAD_DIR}/public/pyodide"
-if [[ ! -f "${PYODIDE_SRC_DIR}/pyodide.js" ]]; then
+if [[ ! -f "${PYODIDE_SRC_DIR}/pyodide.mjs" ]]; then
   echo "error: Pyodide runtime not found at ${PYODIDE_SRC_DIR}" 1>&2
   echo "       Run: make pyodide" 1>&2
   exit 1
@@ -80,53 +84,31 @@ echo "[build-payload] bundling pyodide assets → dist/pyodide/"
 cp -R "${PYODIDE_SRC_DIR}/" "${PAYLOAD_DIR}/dist/pyodide/"
 echo "[build-payload] pyodide bundle ok ($(du -sh "${PAYLOAD_DIR}/dist/pyodide" | cut -f1))"
 
-# ── Step 5: Bundle fortweb Python shims ──────────────────────────────────
+# ── Step 6: Bundle keriwasm Python shims ──────────────────────────────────────
 # Compatibility shims (pysodium, lmdb), the IndexedDB backend, and the hio
-# subset live in fortweb/app/runtime/ — the single source of truth for all Pyodide
+# subset live in keriwasm/python/ — the single source of truth for all Pyodide
 # Python files.  We cherry-pick only the files needed at runtime.
-FORTWEB_PYTHON_DIR="${SCRIPT_DIR}/../fortweb/app/runtime"
+KERIWASM_PYTHON_DIR="${SCRIPT_DIR}/../keriwasm/python"
 PYTHON_FILES=(indexeddb_python.py pysodium.py lmdb.py)
 
-if [[ ! -d "${FORTWEB_PYTHON_DIR}" ]]; then
-  echo "error: fortweb/app/runtime/ not found at ${FORTWEB_PYTHON_DIR}" 1>&2
-  echo "       Ensure libs/fortweb is checked out alongside Fort-ios" 1>&2
+if [[ ! -d "${KERIWASM_PYTHON_DIR}" ]]; then
+  echo "error: keriwasm/python/ not found at ${KERIWASM_PYTHON_DIR}" 1>&2
+  echo "       Ensure libs/keriwasm is checked out alongside Fort-ios" 1>&2
   exit 1
 fi
 
 mkdir -p "${PAYLOAD_DIST_DIR}/python"
 for pyfile in "${PYTHON_FILES[@]}"; do
-  src="${FORTWEB_PYTHON_DIR}/${pyfile}"
+  src="${KERIWASM_PYTHON_DIR}/${pyfile}"
   if [[ ! -f "${src}" ]]; then
-    echo "warning: Python shim not found in fortweb: ${src}" 1>&2
-  else
-    cp "${src}" "${PAYLOAD_DIST_DIR}/python/${pyfile}"
+    echo "error: required Python shim not found: ${src}" 1>&2
+    exit 1
   fi
+  cp "${src}" "${PAYLOAD_DIST_DIR}/python/${pyfile}"
 done
 
-# Generate fallback compatibility shims for pysodium and lmdb if not found in fortweb
-if [[ ! -f "${PAYLOAD_DIST_DIR}/python/pysodium.py" ]]; then
-  cat > "${PAYLOAD_DIST_DIR}/python/pysodium.py" <<'PY'
-"""Compatibility shim mapping pysodium imports to pychloride."""
-
-from pychloride import *  # noqa: F401,F403
-PY
-fi
-
-if [[ ! -f "${PAYLOAD_DIST_DIR}/python/lmdb.py" ]]; then
-  cat > "${PAYLOAD_DIST_DIR}/python/lmdb.py" <<'PY'
-"""LMDB placeholder shim for Pyodide payloads using IndexedDB persistence."""
-
-class Error(Exception):
-    """Compatibility exception type for code importing lmdb.Error."""
-
-
-def open(*_args, **_kwargs):
-    raise Error("lmdb shim: persistent storage is provided by indexeddb_python")
-PY
-fi
-
 # Bundle hio subset (required for keripy imports: doing, decking, ogling, etc.)
-HIO_SRC_DIR="${FORTWEB_PYTHON_DIR}/hio"
+HIO_SRC_DIR="${KERIWASM_PYTHON_DIR}/hio"
 if [[ -d "${HIO_SRC_DIR}" ]]; then
   cp -R "${HIO_SRC_DIR}" "${PAYLOAD_DIST_DIR}/python/hio"
   HIO_COUNT=$(find "${PAYLOAD_DIST_DIR}/python/hio" -name '*.py' | wc -l | tr -d ' ')
@@ -155,9 +137,9 @@ else
 fi
 
 TOTAL_PY=$(find "${PAYLOAD_DIST_DIR}/python" -name '*.py' | wc -l | tr -d ' ')
-echo "[build-payload] fortweb python shims → dist/python/ (${TOTAL_PY} files total)"
+echo "[build-payload] keriwasm python shims → dist/python/ (${TOTAL_PY} files total)"
 
-# ── Step 6: Validate manifest ─────────────────────────────────────────────────
+# ── Step 7: Validate manifest ─────────────────────────────────────────────────
 if [[ ! -f "${MANIFEST_PATH}" ]]; then
   echo "error: build-manifest.json missing at ${MANIFEST_PATH}" 1>&2
   exit 1
@@ -173,19 +155,30 @@ with open(manifest_path, "r", encoding="utf-8") as f:
     data = json.load(f)
 
 required = [
-    "schema",
-    "created_at",
-    "git_sha",
-    "node_version",
-    "package_lock_sha256",
-    "dist_tree_sha256",
+  "schema",
+  "created_at",
+  "producer",
+  "payload_profile",
+  "entry_document",
+  "entry_script",
+  "build_command",
+  "git_sha",
+  "source_git_branch",
+  "source_git_status",
+  "node_version",
+  "package_lock_sha256",
+  "pyodide_worker_mode",
+  "pyodide_asset_path",
+  "pyodide_asset_mode",
+  "sync_targets",
+  "dist_tree_sha256",
 ]
 
 missing = [k for k in required if k not in data]
 if missing:
     raise SystemExit(f"error: build-manifest missing keys: {missing}")
 
-if data.get("schema") != 1:
+if data.get("schema") != 2:
     raise SystemExit(f"error: unsupported manifest schema: {data.get('schema')}")
 
 print(
