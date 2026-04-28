@@ -1,22 +1,26 @@
 # Fort-ios
 
-**Fort-ios** is the KERI Foundation iOS wallet host repo. It currently contains a thin native wrapper plus two web-payload lanes that share the same host workflow:
+**Fort-ios** is the KERI Foundation iOS wallet app. It consists of two tightly coupled layers:
 
 | Layer | What it is | Where it lives |
 |-------|-----------|----------------|
-| **Local proof payload** | Legacy Vite + TypeScript proof harness used to validate the worker seam, Pyodide boot, and storage behavior | `src/`, `public/`, `vite.config.ts` |
+| **Web payload** | Vite + TypeScript app that boots Pyodide (Python in WASM) and runs KERI crypto | `src/`, `public/`, `vite.config.ts` |
 | **iOS wrapper** | UIKit app with a `WKWebView` that serves the web payload via a custom `app://` scheme handler | `xcodeproj/`, `KeriWallet/` |
 
 The two layers communicate through a typed JS↔Swift bridge (`bridge-contract.json`). The web payload is bundled at build time and served entirely from the app bundle — no network fetches at runtime.
 
-The repo currently supports two payload sources through the same iOS host workflow:
+## Current transition note
 
-| Payload source | Status | How to stage it |
-|-------|--------|----------------|
-| `fortweb` | Mainline convergence lane for the thin-wrapper target; now the default host path | `make sync` or `make sync-fortweb` |
-| `fort-ios` | Legacy proof-harness lane kept for seam validation and reference | `PAYLOAD_SOURCE=fort-ios make sync` |
+Current operational reality and target architecture differ.
 
-For current thin-wrapper convergence work, treat `fortweb` as the intended hosted product payload. The `fort-ios` payload remains useful for local bridge and worker validation, but it is not the product-path source of truth.
+- Today, the live local scripts still build from the Fort-ios-local payload surface and stage generated output into `WebPayload/`.
+- Today, wrapper deployment defaults to the FortWeb shared-payload path, while the Fort-ios-local payload remains available only behind `PAYLOAD_SOURCE=fort-ios` as a blocked seam-validation lane.
+- The Fort-ios-local payload is now explicitly treated as a blocked proof-shell producer for wrapper deployment. `sync-payload.sh` and the Android refresh script fail closed if the generated manifest still reports `producer = fort-ios-local` or `payload_profile = proof-shell`, or if proof-shell markers remain in the generated payload.
+- The Fort-ios-local Pyodide seam now assumes the upstream Pyodide 0.29 module contract: the worker is spawned as a module worker and loads `pyodide.mjs`. `build-payload.sh` runs a compatibility check before bundling so classic-worker or ESM-asset drift fails early.
+- The target architecture remains one canonical shared web payload consumed by thin native wrappers.
+- Treat `WebPayload/` as generated output only. Never edit it by hand.
+- Treat the Fort-ios-local `src/` and `index.html` product surface as a transition or proof-shell lane until the shared-payload stabilization work is completed.
+- The active stabilization direction is to move the wrappers onto one canonical shared payload baseline, likely FortWeb, and keep wrapper bundle directories generated and disposable.
 
 ---
 
@@ -53,7 +57,7 @@ Pyodide currently ships Python **3.13**. Any Python code loaded in the web paylo
 (via `runPythonAsync`) must be compatible with 3.13 — do not use Python 3.14-only
 features until Pyodide releases a 3.14 build. This applies regardless of what
 keripy uses on the server side. See the
-[2026-02-24 meeting](docs/meetings/raw-transcripts/2026-02/2026-02-24-pt-3.md)
+[2026-02-24 meeting](../../docs/meetings/raw-transcripts/2026-02/2026-02-24-pt-3.md)
 for Sam's directive on this constraint.
 
 ---
@@ -77,41 +81,42 @@ make pyodide
 
 After these three steps the project is ready to build.
 
+### Physical device quick start
+
+- Connect the iPhone by USB, unlock it, trust the Mac if prompted, and finish pairing in Xcode.
+- Enable Developer Mode when Xcode asks for it. The setting appears only after pairing starts.
+- In Xcode, add the Apple account in Settings > Accounts, keep Automatically Manage Signing enabled, and assign the correct team.
+- Run the app once over USB before switching to Wi-Fi deployment.
+- Keep Low Power Mode off during development. Use Auto-Lock = 5 minutes as the default, and use Never only for charging bench sessions.
+- Use a clear inventory name such as `KERI Dev iPhone` so the device is easy to identify in Xcode and logs.
+- See [ios-xcode-workflow.instructions.md](docs/instructions/ios-xcode-workflow.instructions.md#physical-device-setup--readiness) for the full device-readiness guidance and the [one-page checklist](docs/instructions/ios-xcode-workflow.instructions.md#one-page-device-checklist).
+
 ---
 
 ## 3. Daily workflow
 
 ```sh
-# 1. Confirm Xcode, Simulator, and payload-source readiness
-make ios-doctor
+# 1. Edit source (TypeScript in src/, Swift in KeriWallet/)
+# 2. If TypeScript changed, rebuild and sync into the iOS bundle
+make sync
 
-# 2. Stage the payload you want to host in iOS
-make sync                       # default: FortWeb convergence path
-make sync-fortweb              # explicit alias for the same FortWeb path
-PAYLOAD_SOURCE=fort-ios make sync  # legacy proof-harness path
+# 3. Lint everything
+make lint       # SwiftLint (Swift sources)
+make lint-ts    # tsc --noEmit (TypeScript)
 
-# 3. Run the fast local checks
-make lint                      # SwiftLint (Swift sources)
-make lint-ts                   # tsc --noEmit (TypeScript)
-make test-ts                   # Vitest unit tests
+# 4. Run the fast test suites
+make test-ts    # Vitest unit tests  (~100 ms)
+make test-e2e   # Playwright structural tests  (~5 s)
 
-# 4. Build and launch on Simulator
-make dev-sim
-make run-sim
+# 5. Build the iOS app for Simulator
+make build
 
-# 5. Build and launch on physical device
-make dev-device
-make run-device DEVICE_REF=<udid-or-name>
+# 6. Run Swift tests
+make test-swift
 
-# 6. Compare both lanes when needed
-make parity-smoke DEVICE_REF=<udid-or-name>
-make logs-sim
-make logs-device DEVICE_REF=<udid-or-name>
+# 7. Open in Xcode and hit ⌘R
+make open
 ```
-
-The default wrapper targets now stage FortWeb automatically. Use `PAYLOAD_SOURCE=fort-ios` only when you intentionally want the legacy proof harness, for example `PAYLOAD_SOURCE=fort-ios make dev-sim`.
-
-For conference acceptance and simulator/device parity runs, use [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](libs/Fort-ios/CONFERENCE-IOS-VALIDATION-CHECKLIST.md).
 
 Run `make help` at any time to list all available targets.
 
@@ -124,18 +129,9 @@ Run `make help` at any time to list all available targets.
 | `make help` | List all targets with descriptions |
 | `make setup` | Install Node dependencies (`npm ci`) |
 | `make pyodide` | Download Pyodide v0.29.1 runtime + crypto wheels into `public/pyodide/` |
-| `make sync` | Sync the selected payload source into `WebPayload/` (`PAYLOAD_SOURCE=fortweb` by default for the mainline thin-wrapper convergence path) |
-| `make sync-fortweb` | Stage the FortWeb payload into `WebPayload/` explicitly; equivalent to the default sync path |
-| `make ios-list-sims` | List available iOS Simulator destinations |
-| `make ios-list-devices` | List CoreDevice-visible physical devices |
-| `make ios-doctor` | Verify Xcode, simulator, and payload-source readiness |
-| `make dev-sim` | Sync payload, run TS checks, and build for Simulator |
-| `make run-sim` | Boot, install, and launch on the configured Simulator |
-| `make dev-device` | Sync payload and build for a generic iOS device output |
-| `make run-device DEVICE_REF=<udid-or-name>` | Install and launch on a physical device |
-| `make parity-smoke DEVICE_REF=<udid-or-name>` | Run the shared payload sequentially on simulator and device |
-| `make logs-sim` | Show recent simulator logs for `KeriWallet` |
-| `make logs-device DEVICE_REF=<udid-or-name>` | Relaunch on device with the console attached |
+| `make sync` | Default wrapper packaging path: stage the FortWeb bundle into `WebPayload/` |
+| `make sync-fortweb` | Explicitly stage the FortWeb bundle into `WebPayload/` |
+| `make sync-fortios` | Run the blocked Fort-ios-local proof-shell lane (expected to fail closed for wrapper deployment) |
 | `make build` | `xcodebuild` — build KeriWallet for iOS Simulator (Debug) |
 | `make open` | Open `KeriWallet.xcodeproj` in Xcode |
 | `make lint` | Run SwiftLint with `--strict` on all Swift sources |
@@ -145,7 +141,7 @@ Run `make help` at any time to list all available targets.
 | `make test-e2e` | Run Playwright structural tests (excludes `@slow` Pyodide boot tests) |
 | `make test-e2e-slow` | Run all Playwright tests including the 120 s Pyodide roundtrip |
 | `make test-all` | Run `test-swift` + `test-ts` + `test-e2e` in sequence |
-| `make bridge-check` | Verify `bridge-contract.ts` and `BridgeContract.swift` match `bridge-contract.json` |
+| `make bridge-check` | Verify `bridge-contract.ts` + `BridgeContract.swift` match JSON; `bridge:check` also validates Kotlin on disk |
 | `make clean` | Remove `build/DerivedData`, `test-results/`, and `dist/` |
 
 ---
@@ -180,6 +176,8 @@ src/ + public/pyodide/  →  npm run build:ci  →  dist/  →  sync-payload.sh 
 
 The pipeline is split into two scripts:
 
+**Current-state note:** `make sync` now targets the FortWeb convergence path by default. The Fort-ios-local proof harness still exists for seam validation, but wrapper deployment should treat it as a blocked legacy producer.
+
 **`build-payload.sh`** (shared, platform-agnostic core):
 
 1. Runs `npm ci && npm run build:ci` to produce a deterministic `dist/`.
@@ -187,15 +185,14 @@ The pipeline is split into two scripts:
 
 **`sync-payload.sh`** (iOS-specific, invoked by `make sync`) supports two modes:
 
-- `PAYLOAD_SOURCE=fortweb`: default mainline convergence path; copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, then writes a root redirect page for the iOS host
-- `PAYLOAD_SOURCE=fort-ios`: legacy proof-harness path; sources `build-payload.sh`, then stages the local Fort-ios payload
+- `PAYLOAD_SOURCE=fortweb`: default mainline convergence path; copies the FortWeb app, vendor, wheels, and runtime config into `WebPayload/fortweb/`, writes a root redirect page, and generates a bundle manifest with producer/runtime provenance.
+- `PAYLOAD_SOURCE=fort-ios`: legacy proof-harness path; sources `build-payload.sh`, sanitises `python_stdlib.zip`, validates the blocked proof-shell contract, and then stages the local Vite output only if the guardrails permit it.
 
-In the `fort-ios` mode it then:
+Useful targets:
 
-3. Sanitises `python_stdlib.zip` — replaces `itms-services` with `itms_services` in `urllib/parse.py` (prevents automated App Store rejection).
-4. Cleans stale files from `WebPayload/`.
-5. Copies `dist/` contents into `WebPayload/`.
-6. Prints a summary (git SHA, file count).
+- `make sync`: FortWeb default
+- `make sync-fortweb`: explicit FortWeb packaging path
+- `make sync-fortios`: explicit legacy proof-shell path, expected to fail closed for wrapper deployment
 
 > **Rule:** Always run the appropriate sync target after changing payload source files. Never manually edit `WebPayload/`.
 
@@ -236,11 +233,11 @@ make test-ts           # single pass (~100 ms)
 npm run test:watch     # watch mode
 ```
 
-Files: `src/__tests__/worker_router.test.ts` (12 tests), `src/__tests__/constants.test.ts` (12 tests).
+Files: `src/__tests__/worker_router.test.ts`, `src/__tests__/constants.test.ts`, `src/__tests__/bridge_adapter.test.ts`, `tools/__tests__/payload-tooling.test.mjs`.
 
 ### Layer 3 — Playwright E2E tests
 
-Structural browser tests that load the built app in Chromium headless and assert DOM invariants, JS error absence, and bridge contract alignment. Today these tests validate only the local seam-validation lane. They should not be read as end-to-end proof that the FortWeb-hosted product path is green. The Pyodide roundtrip test is tagged `@slow` (120 s) and excluded from the default CI run.
+Structural browser tests that load the built app in Chromium headless and assert DOM invariants, JS error absence, and bridge contract alignment. The Pyodide roundtrip test is tagged `@slow` (120 s) and excluded from the default CI run.
 
 ```sh
 make test-e2e          # structural tests only (~5 s)
@@ -248,8 +245,6 @@ make test-e2e-slow     # includes Pyodide boot roundtrip (~120 s)
 ```
 
 Files: `playwright/app.spec.ts`.
-
-For the native wrapper itself, use `make logs-sim`, `make logs-device`, or Console.app to inspect the retained host-side breadcrumbs around initial payload load, first bridge receipt, blocked navigation, and scheme-handler failures.
 
 ### Run everything
 
@@ -264,10 +259,10 @@ make test-all   # test-swift + test-ts + test-e2e
 The JS↔native bridge is governed by a typed contract so all sides stay in sync.
 
 - **Source of truth:** `bridge-contract.json` (committed)
-- **Generated:** `src/bridge-contract.ts` (TypeScript), `KeriWallet/BridgeContract.swift` (Swift), and `generated/BridgeContract.kt` (Kotlin for Fort-android)
-- **Verify sync:** `make bridge-check` (exits non-zero if generated output differs from committed JSON)
+- **Generated:** `src/bridge-contract.ts` (TypeScript), `KeriWallet/BridgeContract.swift` (Swift), and `generated/BridgeContract.kt` (Kotlin for Fort-android — **not committed**; run `npm run prebuild` or `npm ci` before Android `sync-payload.sh` copies it)
+- **Verify sync:** `make bridge-check` runs `npm run bridge:check` (all three languages) then `git diff` on the **tracked** TS + Swift outputs only
 
-The `prebuild` npm hook regenerates both files automatically before every build. In CI, `make bridge-check` must pass before tests run.
+The `prebuild` npm hook regenerates all contract files automatically before every build. In CI, `make bridge-check` must pass before tests run.
 
 Message envelope shape (JS → Swift):
 
@@ -282,14 +277,14 @@ Message envelope shape (JS → Swift):
 ```
 Fort-ios/
 ├── src/                        # TypeScript source
-│   ├── main.ts                 # Legacy proof-harness entry point
+│   ├── main.ts                 # Entry point — mounts UI, boots worker
 │   ├── bridge_adapter.ts       # Platform-agnostic bridge transport (iOS/Android/no-op)
 │   ├── pyodide_worker.ts       # Web Worker — WASM bootstrap lifecycle
 │   ├── worker_router.ts        # Pure message dispatch (testable without WASM)
 │   ├── bridge-contract.ts      # Generated — do not edit by hand
 │   └── __tests__/              # Vitest unit tests
 ├── generated/
-│   └── BridgeContract.kt       # Generated Kotlin constants (for Fort-android)
+│   └── BridgeContract.kt       # Generated Kotlin (gitignored — produced beside TS/Swift)
 ├── public/
 │   └── pyodide/                # Gitignored — populated by `make pyodide`
 ├── playwright/
@@ -315,11 +310,13 @@ Fort-ios/
 │   └── KeriWallet/
 │       ├── KeriWallet/         # Mirror of KeriWallet/ above (symlinked)
 │       └── KeriWallet.xcodeproj
-├── WebPayload/                 # Synced dist/ output — Xcode bundles this
-├── WebPayloadOverride/         # Debug-only local override (NOT YET IMPLEMENTED)
+├── WebPayload/                 # Generated wrapper bundle directory — Xcode bundles this
 ├── Config/
 │   ├── Debug.xcconfig
 │   └── Release.xcconfig
+├── docs/
+│   ├── adr/                    # Architecture Decision Records (ADR-022 → ADR-031)
+│   └── instructions/           # Coding standards and how-to guides
 ├── bridge-contract.json        # Source of truth for the JS↔native bridge
 ├── build-payload.sh            # Platform-agnostic build core (sourced by sync scripts)
 ├── sync-payload.sh             # iOS-specific payload sync (invoked by `make sync`)
@@ -337,34 +334,33 @@ Fort-ios/
 
 ## 10. Documentation index
 
-### Workspace Architecture Decision Records
+### Architecture Decision Records
 
 | ADR | Title | Summary |
 |-----|-------|---------|
 | [ADR-022](docs/adr/ADR-022-ios-wkwebview-pyodide-bundled-payload.md) | Bundled payload decision | Why all assets are bundled at build time (no runtime download) |
 | [ADR-023](docs/adr/ADR-023-ios-wrapper-architecture.md) | iOS wrapper architecture | UIKit + WKWebView + custom scheme handler design |
-| [ADR-024](docs/adr/ADR-024-web-payload-build-bundling.md) | Web payload build & bundling | Deterministic build, `sync-payload.sh`, and bundle staging |
-| [ADR-025](docs/adr/ADR-025-ios-build-ci-developer-workflow.md) | iOS build/CI & developer workflow | VS Code + `xcodebuild` golden path, CI recipe |
-| [ADR-026](docs/adr/ADR-026-ios-logging-strategy.md) | iOS logging strategy | `AppLogger`, privacy-aware OSLog usage |
-| [ADR-031](docs/adr/ADR-031-cross-platform-shared-web-payload.md) | Cross-platform shared web payload | Thin native wrappers around one shared web payload |
-| [ADR-051](docs/adr/ADR-051-android-native-wrapper-thin-webview-host.md) | Android thin host | Current Android wrapper posture aligned with the iOS thin-host goal |
+| [ADR-024](docs/adr/ADR-024-web-payload-build-bundling.md) | Web payload build & bundling | Vite config, deterministic build, `sync-payload.sh` |
+| [ADR-025](docs/adr/ADR-025-ios-build-ci-developer-workflow.md) | iOS build/CI & developer workflow | VS Code + xcodebuild golden path, CI recipe |
+| [ADR-026](docs/adr/ADR-026-ios-logging-strategy.md) | iOS logging strategy | `AppLogger` — privacy-aware, OSLog-backed |
+| [ADR-027](docs/adr/ADR-027-keri-brand-identity-ui-integration.md) | KERI brand identity & UI integration | Colors, logo variants, iOS/web usage rules |
+| [ADR-028](docs/adr/ADR-028-ios-swiftlint-type-inference-strategy.md) | SwiftLint & type-inference strategy | Lint rules, explicit type annotation policy |
+| [ADR-029](docs/adr/ADR-029-fort-ios-subtree-extraction.md) | Fort-ios subtree extraction | How this repo was extracted from keri-notes as a git subtree |
+| [ADR-030](docs/adr/ADR-030-ios-ts-testing-architecture.md) | iOS + TypeScript testing architecture | Three-layer test pyramid, Vitest/Playwright/swift-testing choices |
+| [ADR-031](docs/adr/ADR-031-cross-platform-shared-web-payload.md) | Cross-platform shared web payload | Bridge adapter abstraction, Kotlin codegen, factored build pipeline |
 
-### Workspace instructions
+### Coding standards
 
 | File | Covers |
 |------|--------|
-| [.github/instructions/ios-swift-coding.instructions.md](.github/instructions/ios-swift-coding.instructions.md) | Swift style, naming, DI patterns, testing with swift-testing |
-| [.github/instructions/ios-xcode-workflow.instructions.md](.github/instructions/ios-xcode-workflow.instructions.md) | Xcode build/CI workflow, anti-patterns catalog, `xcodebuild` reference |
-| [.github/instructions/ios-wkwebview-pyodide-bundled-payload.instructions.md](.github/instructions/ios-wkwebview-pyodide-bundled-payload.instructions.md) | WKWebView rules, scheme handler, worker architecture, telemetry bridge |
-| [.github/instructions/pyodide-config.instructions.md](.github/instructions/pyodide-config.instructions.md) | Pyodide version, wheel sources, `unpackArchive` install pattern |
-| [.github/instructions/pyodide-event-loop.instructions.md](.github/instructions/pyodide-event-loop.instructions.md) | Asyncio event loop inside Pyodide WASM |
-| [.github/instructions/pyodide-js-bridge.instructions.md](.github/instructions/pyodide-js-bridge.instructions.md) | Python↔JavaScript data passing via Pyodide proxy objects |
-
-### Conference validation
-
-| File | Purpose |
-|------|---------|
-| [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](CONFERENCE-IOS-VALIDATION-CHECKLIST.md) | End-to-end simulator and physical-device validation script for conference acceptance |
+| [ios-swift-coding.instructions.md](docs/instructions/ios-swift-coding.instructions.md) | Swift style, naming, DI patterns, testing with swift-testing |
+| [ios-xcode-workflow.instructions.md](docs/instructions/ios-xcode-workflow.instructions.md) | Xcode build/CI workflow, physical device setup, one-page device checklist, anti-patterns catalog, `xcodebuild` reference |
+| [ios-wkwebview-pyodide-bundled-payload.instructions.md](docs/instructions/ios-wkwebview-pyodide-bundled-payload.instructions.md) | WKWebView rules, scheme handler, worker architecture, telemetry bridge |
+| [branding-visual-identity.instructions.md](docs/instructions/branding-visual-identity.instructions.md) | KERI brand colors, logo variants, Swift color constants, CSS custom properties |
+| [pyodide-config.instructions.md](docs/instructions/pyodide-config.instructions.md) | Pyodide version, wheel sources, `unpackArchive` install pattern |
+| [pyodide-event-loop.instructions.md](docs/instructions/pyodide-event-loop.instructions.md) | Asyncio event loop inside Pyodide WASM |
+| [pyodide-js-bridge.instructions.md](docs/instructions/pyodide-js-bridge.instructions.md) | Python↔JavaScript data passing via Pyodide proxy objects |
+| [pyodide-wasm-wheel-packaging.instructions.md](docs/instructions/pyodide-wasm-wheel-packaging.instructions.md) | Building WASM-compatible wheels (blake3, pychloride) |
 
 ---
 
@@ -374,7 +370,7 @@ Two issues arise from the bundled Pyodide payload. Both are handled automaticall
 
 ### `itms-services` string in `python_stdlib.zip`
 
-`urllib/parse.py` inside the bundled `python_stdlib.zip` contains the string `itms-services`, which triggers Apple's automated binary scanner and causes App Store rejection. `sync-payload.sh` patches this during sync by replacing `itms-services` → `itms_services` in the zip in place.
+`urllib/parse.py` inside the Fort-ios-local `python_stdlib.zip` contains the string `itms-services`, which triggers Apple's automated binary scanner and causes App Store rejection. `sync-payload.sh` only applies this patch in the blocked `PAYLOAD_SOURCE=fort-ios` seam-validation lane.
 
 To verify the patch was applied:
 
