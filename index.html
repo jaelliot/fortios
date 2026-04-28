@@ -6,8 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <title>KERI Wallet</title>
-  <!-- Legacy proof-shell document. Keep only as a bounded seam-validation surface;
-       do not treat it as the authoritative FortWeb-hosted product UI. -->
   <style>
     /* ─── Brand tokens (ADR-027) ────────────────────────────────────── */
     :root {
@@ -89,7 +87,7 @@
       touch-action: manipulation;
     }
 
-    /* ─── Loading screen (visible during seam validation boot) ──────── */
+    /* ─── Loading screen (visible during Pyodide boot) ──────────────── */
     #loading {
       display: flex;
       flex-direction: column;
@@ -138,7 +136,7 @@
       }
     }
 
-    /* ─── Main app (hidden until the seam-validation lane is ready) ─── */
+    /* ─── Main app (hidden until Pyodide ready) ─────────────────────── */
     #app {
       display: none;
     }
@@ -237,7 +235,7 @@
       }
     }
 
-    /* ─── Profile form (IndexedDB seam validation) ───────────────────── */
+    /* ─── Profile form (IndexedDB persistence demo) ──────────────────── */
     .profile-section {
       margin-top: var(--space-lg);
       padding-top: var(--space-md);
@@ -350,6 +348,104 @@
       }
     }
 
+    /* ─── Identifiers section ───────────────────────────────────────── */
+    .identifiers-section {
+      margin-top: var(--space-lg);
+      padding-top: var(--space-md);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .identifiers-section {
+        border-top-color: rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted-dark);
+      margin-bottom: var(--space-sm);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .section-title {
+        color: var(--text-muted-light);
+      }
+    }
+
+    .id-list {
+      list-style: none;
+      padding: 0;
+      margin: var(--space-sm) 0 0;
+    }
+
+    .id-list li {
+      padding: var(--space-sm);
+      margin-bottom: var(--space-xs);
+      border-radius: 8px;
+      background-color: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .id-list li {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-color: rgba(0, 0, 0, 0.06);
+      }
+    }
+
+    .id-alias {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-dark);
+    }
+
+    @media (prefers-color-scheme: light) {
+      .id-alias {
+        color: var(--text-light);
+      }
+    }
+
+    .id-prefix {
+      font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--text-muted-dark);
+      word-break: break-all;
+      margin-top: 2px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      .id-prefix {
+        color: var(--text-muted-light);
+      }
+    }
+
+    .id-state {
+      font-size: 11px;
+      color: var(--text-muted-dark);
+      margin-top: 2px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      .id-state {
+        color: var(--text-muted-light);
+      }
+    }
+
+    #id-status {
+      font-size: 13px;
+      color: var(--text-muted-dark);
+    }
+
+    @media (prefers-color-scheme: light) {
+      #id-status {
+        color: var(--text-muted-light);
+      }
+    }
+
     /* ─── Record JSON display ────────────────────────────────────────── */
     #record-json {
       margin-top: var(--space-sm);
@@ -384,18 +480,18 @@
     <span id="loading-status">Initializing…</span>
   </div>
 
-  <!-- Main app: revealed after the local seam-validation lane boots -->
+  <!-- Main app: revealed after Pyodide boots -->
   <div id="app">
     <div class="header">
       <img src="./FullLogo.svg" alt="KERI Foundation" />
     </div>
     <div class="status-row">
       <span class="status-dot" id="status-dot"></span>
-      <span id="status">booting seam validation</span>
+      <span id="status">booting</span>
     </div>
     <pre id="output"></pre>
 
-    <!-- Profile persistence seam check (IndexedDB via Pyodide worker) -->
+    <!-- Profile persistence demo (IndexedDB via Pyodide worker) -->
     <div class="profile-section">
       <div class="field-group">
         <label for="profile-id">Profile ID</label>
@@ -415,6 +511,17 @@
         <span id="db-status"></span>
       </div>
       <pre id="record-json">No record loaded.</pre>
+    </div>
+
+    <!-- Identifiers proof slice (store-scoped KV via worker) -->
+    <div class="identifiers-section">
+      <div class="section-title">Local Identifiers</div>
+      <div class="btn-row">
+        <button class="btn" id="btn-seed">Seed Test Data</button>
+        <button class="btn" id="btn-list-ids">List Identifiers</button>
+        <span id="id-status"></span>
+      </div>
+      <ul class="id-list" id="id-list"></ul>
     </div>
   </div>
 </body>
