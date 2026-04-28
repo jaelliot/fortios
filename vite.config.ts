@@ -10,7 +10,7 @@ const crossOriginHeaders = {
 
 export default defineConfig({
     // Relative base so the same `dist/` works when served from a custom scheme
-    // via WKURLSchemeHandler (e.g., keriwasm://localhost/).
+    // via WKURLSchemeHandler (e.g., app://local/index.html).
     base: './',
     build: {
         outDir: 'dist',

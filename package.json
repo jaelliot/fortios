@@ -1,5 +1,5 @@
 {
-  "name": "keriwasm-web-payload",
+  "name": "fortweb-web-payload",
   "private": true,
   "type": "module",
   "scripts": {

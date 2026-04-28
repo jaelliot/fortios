@@ -58,8 +58,27 @@ function makeMockKVFactory(backing: Record<string, string> = {}): KVFactory {
             }
             return instance;
         }),
+        list: vi.fn(async (prefix: string) => Object.entries(store)
+            .filter(([key]) => key.startsWith(prefix))
+            .map(([key, value]) => ({ key, value }))),
         close: vi.fn(),
     };
+}
+
+function makeMockKVFactory(stores: Record<string, Record<string, string>> = {}): KVFactory {
+    const cache = new Map<string, WorkerKV>();
+
+    const factory = ((store: string) => {
+        const existing = cache.get(store);
+        if (existing) return existing;
+
+        const kv = makeMockKV(stores[store] ?? (stores[store] = {}));
+        cache.set(store, kv);
+        return kv;
+    }) as KVFactory;
+
+    factory.close = vi.fn();
+    return factory;
 }
 
 // ── handleBlake3Hash ─────────────────────────────────────────────────────────
@@ -545,6 +564,77 @@ describe('IndexedDB put → get → del round-trip', () => {
             kvFactory,
         );
         expect(loadRes).toHaveProperty('value', 'v2');
+    });
+
+    it('keeps stores isolated during list operations', async () => {
+        const pyodide = makeMockPyodide();
+        const kvFactory = makeMockKVFactory({
+            names: { 'personal^alice': 'EAlice' },
+            habs: { 'personal^alice': '{"pre":"EAlice"}' },
+        });
+
+        const result = await routeMessage(
+            { id: 'db-rt9', type: 'db_list', store: 'names', prefix: '' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        expect(result.type).toBe('db_list_result');
+        if (result.type !== 'db_list_result') throw new Error('unreachable');
+        expect(result.entries).toEqual([{ key: 'personal^alice', value: 'EAlice' }]);
+    });
+
+    it('models FortWeb registry and per-vault store names without widening the contract', async () => {
+        const pyodide = makeMockPyodide();
+        const kvFactory = makeMockKVFactory();
+        const registryStore = 'fortweb-vault-registry:vaults.';
+        const vaultStateStore = 'fortweb-vault-alpha:kfst.';
+
+        await routeMessage(
+            {
+                id: 'fw-1',
+                type: 'db_put',
+                store: registryStore,
+                key: 'alpha',
+                value: '{"id":"alpha","opened":true}',
+            },
+            pyodide,
+            true,
+            kvFactory,
+        );
+        await routeMessage(
+            {
+                id: 'fw-2',
+                type: 'db_put',
+                store: vaultStateStore,
+                key: 'state',
+                value: '{"status":"ready"}',
+            },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        const registryRes = await routeMessage(
+            { id: 'fw-3', type: 'db_list', store: registryStore, prefix: '' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+        const stateRes = await routeMessage(
+            { id: 'fw-4', type: 'db_get', store: vaultStateStore, key: 'state' },
+            pyodide,
+            true,
+            kvFactory,
+        );
+
+        expect(registryRes.type).toBe('db_list_result');
+        if (registryRes.type !== 'db_list_result') throw new Error('unreachable');
+        expect(registryRes.entries).toEqual([{ key: 'alpha', value: '{"id":"alpha","opened":true}' }]);
+
+        expect(stateRes.type).toBe('db_get_result');
+        expect(stateRes).toHaveProperty('value', '{"status":"ready"}');
     });
 });
 

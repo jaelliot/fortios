@@ -84,6 +84,86 @@ struct WebBridgeEnvelopeTests {
     }
 }
 
+@Suite("WebBridge logging classification")
+struct WebBridgeLoggingClassificationTests {
+
+    private let decoder: JSONDecoder = JSONDecoder()
+
+    private func envelope(_ json: String) throws -> WebBridgeEnvelope {
+        let data = try #require(json.data(using: .utf8))
+        return try decoder.decode(WebBridgeEnvelope.self, from: data)
+    }
+
+    @Test("known lifecycle states become notice breadcrumbs")
+    func lifecycleBootIsNotice() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"lifecycle","timestamp":"t","message":"boot"}
+        """))
+
+        #expect(disposition.level == .notice)
+        #expect(disposition.message.contains("lifecycle: boot"))
+    }
+
+    @Test("unknown lifecycle states warn on bridge drift")
+    func lifecycleDoneWarns() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"lifecycle","timestamp":"t","message":"done"}
+        """))
+
+        #expect(disposition.level == .warning)
+        #expect(disposition.message.contains("lifecycle drift"))
+    }
+
+    @Test("FortWeb lifecycle diagnostics map boot to notice")
+    func fortwebLifecycleBootIsNotice() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"lifecycle","timestamp":"t","message":"[fortweb.runtime] event=worker_lifecycle state=\\"boot\\""}
+        """))
+
+        #expect(disposition.level == .notice)
+        #expect(disposition.message == "[WebBridge] lifecycle: boot")
+    }
+
+    @Test("FortWeb warning diagnostics keep warning severity")
+    func fortwebWarningDiagnosticWarns() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"log","timestamp":"t","message":"[fortweb.runtime] event=request_timeout level=\\"warning\\" method=\\"vaults.create\\""}
+        """))
+
+        #expect(disposition.level == .warning)
+        #expect(disposition.message.contains("request_timeout"))
+    }
+
+    @Test("FortWeb request start diagnostics stay low-volume")
+    func fortwebRequestStartDiagnosticIsDebug() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"log","timestamp":"t","message":"[fortweb.runtime] event=request_start level=\\"info\\" method=\\"vaults.list\\""}
+        """))
+
+        #expect(disposition.level == .debug)
+        #expect(disposition.message.contains("runtime:"))
+    }
+
+    @Test("error-like log messages escalate to error")
+    func errorLogEscalates() throws {
+        let disposition = WebBridge.logDisposition(for: try envelope("""
+        {"type":"log","timestamp":"t","message":"fatal worker error"}
+        """))
+
+        #expect(disposition.level == .error)
+        #expect(disposition.message.contains("escalated to error"))
+    }
+
+    @Test("crypto result errors warn for operator breadcrumbs")
+    func cryptoResultErrorWarns() {
+        let disposition = WebBridge.cryptoResultDisposition(
+            for: CryptoResultPayload(id: "op-1", message: "", error: "worker failed"))
+
+        #expect(disposition.level == .warning)
+        #expect(disposition.message.contains("id=op-1"))
+    }
+}
+
 // MARK: - BridgeContract cross-language consistency
 
 @Suite("BridgeContract cross-language consistency")

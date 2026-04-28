@@ -1,4 +1,12 @@
-import { LOADING_FADE_MS, PROOF_CHALLENGE } from './constants';
+import {
+    FORTWEB_KF_STATE_SUBDB,
+    FORTWEB_REGISTRY_STORE,
+    LOADING_FADE_MS,
+    PROOF_CHALLENGE,
+    fortwebRegistryWorkerStore,
+    fortwebVaultStorageName,
+    fortwebVaultWorkerStore,
+} from './constants';
 import {
     generateId,
     initPyodide,
@@ -10,6 +18,9 @@ import {
     sendToWorker,
 } from './keri_runtime';
 
+// Legacy proof-harness entry point. This file is still useful for worker-seam
+// validation, but it is not the authoritative FortWeb-hosted product path.
+
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 const loadingEl = document.getElementById('loading');
 const loadingStatusEl = document.getElementById('loading-status');
@@ -18,7 +29,7 @@ const statusEl = document.getElementById('status');
 const statusDotEl = document.getElementById('status-dot');
 const outputEl = document.getElementById('output');
 
-// Profile form elements (IndexedDB persistence demo)
+// Profile form elements for the local seam-validation lane.
 const profileIdEl = document.getElementById('profile-id') as HTMLInputElement | null;
 const profileNameEl = document.getElementById('profile-name') as HTMLInputElement | null;
 const profileNoteEl = document.getElementById('profile-note') as HTMLTextAreaElement | null;
@@ -374,15 +385,18 @@ async function main(): Promise<void> {
     setLoadingStatus('Loading Pyodide…');
     await initPyodide();
 
-    setLoadingStatus('Running crypto proof…');
+    setLoadingStatus('Running seam validation…');
     showApp();
     installProfileHandlers();
     installIdentifierHandlers();
 
-    setStatus('running proof');
+    setStatus('running crypto seam check');
     await runProof();
 
-    setStatus('done', 'done');
+    setStatus('running fortweb storage seam check');
+    await runFortwebStorageProof();
+
+    setStatus('seam validation ready', 'done');
     postToBridge({ type: 'lifecycle', timestamp: isoNow(), message: 'done' });
 }
 

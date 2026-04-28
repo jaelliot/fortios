@@ -12,21 +12,21 @@ const SAMPLE_ENVELOPE: BridgeEnvelope = {
 
 describe('createBridgeAdapter', () => {
     let savedWebkit: unknown;
-    let savedAndroidBridge: unknown;
+    let savedBridgeHandler: unknown;
 
     beforeEach(() => {
         savedWebkit = (window as any).webkit;
-        savedAndroidBridge = (window as any).AndroidBridge;
+        savedBridgeHandler = (window as any)[BRIDGE_HANDLER_NAME];
         delete (window as any).webkit;
-        delete (window as any).AndroidBridge;
+        delete (window as any)[BRIDGE_HANDLER_NAME];
     });
 
     afterEach(() => {
         if (savedWebkit !== undefined) {
             (window as any).webkit = savedWebkit;
         }
-        if (savedAndroidBridge !== undefined) {
-            (window as any).AndroidBridge = savedAndroidBridge;
+        if (savedBridgeHandler !== undefined) {
+            (window as any)[BRIDGE_HANDLER_NAME] = savedBridgeHandler;
         }
     });
 
@@ -43,9 +43,9 @@ describe('createBridgeAdapter', () => {
         expect(mockPost).toHaveBeenCalledWith(SAMPLE_ENVELOPE);
     });
 
-    it('returns Android adapter when window.AndroidBridge exists', () => {
+    it('returns Android adapter when the handler-name bridge exists', () => {
         const mockPost = vi.fn();
-        (window as any).AndroidBridge = { postMessage: mockPost };
+        (window as any)[BRIDGE_HANDLER_NAME] = { postMessage: mockPost };
 
         const adapter = createBridgeAdapter();
         adapter.postMessage(SAMPLE_ENVELOPE);
@@ -73,7 +73,7 @@ describe('createBridgeAdapter', () => {
         (window as any).webkit = {
             messageHandlers: { [BRIDGE_HANDLER_NAME]: { postMessage: iosMock } },
         };
-        (window as any).AndroidBridge = { postMessage: androidMock };
+        (window as any)[BRIDGE_HANDLER_NAME] = { postMessage: androidMock };
 
         const adapter = createBridgeAdapter();
         adapter.postMessage(SAMPLE_ENVELOPE);

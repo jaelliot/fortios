@@ -24,18 +24,20 @@
         "blake3_hash",
         "sign",
         "verify",
-        "db_save",
-        "db_load",
-        "db_delete"
+        "db_put",
+        "db_get",
+        "db_del",
+        "db_list"
     ],
     "workerResultTypes": [
         "ready",
         "blake3_result",
         "sign_result",
         "verify_result",
-        "db_save_result",
-        "db_load_result",
-        "db_delete_result",
+        "db_put_result",
+        "db_get_result",
+        "db_del_result",
+        "db_list_result",
         "error",
         "log"
     ]

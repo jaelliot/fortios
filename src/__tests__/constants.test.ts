@@ -4,18 +4,33 @@ import {
     WORKER_LOG_ID,
     LOADING_FADE_MS,
     BLAKE3_WHEEL,
+    FORTWEB_KF_STATE_SUBDB,
+    FORTWEB_REGISTRY_NAME,
+    FORTWEB_REGISTRY_STORE,
+    FORTWEB_WALLET_STORAGE_PREFIX,
     PYCHLORIDE_WHEEL,
     PROOF_CHALLENGE,
+    fortwebRegistryWorkerStore,
+    fortwebVaultStorageName,
+    fortwebVaultWorkerStore,
 } from '../constants';
 import {
     BRIDGE_HANDLER_NAME,
     BRIDGE_MESSAGE_TYPES,
     WORKER_CMD_INIT,
     WORKER_CMD_BLAKE3_HASH,
+    WORKER_CMD_DB_DEL,
+    WORKER_CMD_DB_GET,
+    WORKER_CMD_DB_LIST,
+    WORKER_CMD_DB_PUT,
     WORKER_CMD_SIGN,
     WORKER_CMD_VERIFY,
     WORKER_RES_READY,
     WORKER_RES_BLAKE3_RESULT,
+    WORKER_RES_DB_DEL_RESULT,
+    WORKER_RES_DB_GET_RESULT,
+    WORKER_RES_DB_LIST_RESULT,
+    WORKER_RES_DB_PUT_RESULT,
     WORKER_RES_SIGN_RESULT,
     WORKER_RES_VERIFY_RESULT,
     WORKER_RES_ERROR,
@@ -48,6 +63,20 @@ describe('constants', () => {
         expect(typeof PROOF_CHALLENGE).toBe('string');
         expect(PROOF_CHALLENGE.length).toBeGreaterThan(0);
     });
+
+    it('FortWeb storage constants match the browser lane naming model', () => {
+        expect(FORTWEB_REGISTRY_NAME).toBe('fortweb-vault-registry');
+        expect(FORTWEB_REGISTRY_STORE).toBe('vaults.');
+        expect(FORTWEB_WALLET_STORAGE_PREFIX).toBe('fortweb-vault-');
+        expect(FORTWEB_KF_STATE_SUBDB).toBe('kfst.');
+    });
+
+    it('maps FortWeb registry and per-vault names onto the worker store seam', () => {
+        expect(fortwebRegistryWorkerStore()).toBe('fortweb-vault-registry:vaults.');
+        expect(fortwebVaultStorageName('alpha')).toBe('fortweb-vault-alpha');
+        expect(fortwebVaultWorkerStore('alpha')).toBe('fortweb-vault-alpha:kfst.');
+        expect(fortwebVaultWorkerStore('alpha', 'custom.')).toBe('fortweb-vault-alpha:custom.');
+    });
 });
 
 describe('bridge-contract constants', () => {
@@ -69,18 +98,26 @@ describe('bridge-contract constants', () => {
         }
     });
 
-    it('worker commands include init, blake3_hash, sign, verify', () => {
+    it('worker commands include init, crypto verbs, and storage verbs', () => {
         expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_INIT);
         expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_BLAKE3_HASH);
         expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_SIGN);
         expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_VERIFY);
+        expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_DB_PUT);
+        expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_DB_GET);
+        expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_DB_DEL);
+        expect(WORKER_COMMAND_TYPES).toContain(WORKER_CMD_DB_LIST);
     });
 
-    it('worker results include ready, blake3_result, sign_result, verify_result, error', () => {
+    it('worker results include ready, crypto results, storage results, and error', () => {
         expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_READY);
         expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_BLAKE3_RESULT);
         expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_SIGN_RESULT);
         expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_VERIFY_RESULT);
+        expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_DB_PUT_RESULT);
+        expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_DB_GET_RESULT);
+        expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_DB_DEL_RESULT);
+        expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_DB_LIST_RESULT);
         expect(WORKER_RESULT_TYPES).toContain(WORKER_RES_ERROR);
     });
 

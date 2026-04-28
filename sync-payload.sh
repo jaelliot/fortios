@@ -124,13 +124,13 @@ node "${PAYLOAD_VALIDATOR}" \
   --target ios-webpayload
 
 if [[ ! -f "${WRAPPER_PAYLOAD_DIR}/index.html" ]]; then
-  echo "error: expected index.html missing after sync" 1>&2
-  exit 1
+	echo "error: expected index.html missing after sync" 1>&2
+	exit 1
 fi
 
 if [[ ! -f "${WRAPPER_PAYLOAD_DIR}/build-manifest.json" ]]; then
-  echo "error: expected build-manifest.json missing after sync" 1>&2
-  exit 1
+	echo "error: expected build-manifest.json missing after sync" 1>&2
+	exit 1
 fi
 
 FILE_COUNT=$(find "${WRAPPER_PAYLOAD_DIR}" -type f | wc -l | tr -d ' ')

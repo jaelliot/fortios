@@ -20,7 +20,7 @@ object BridgeContract {
 
     // ── Bridge Handler ──────────────────────────────────────────────────────
 
-    /** addJavascriptInterface name — must match JS: `window.AndroidBridge`. */
+    /** JS-visible bridge object name — must match the host-exposed `window.bridge` surface. */
     const val HANDLER_NAME = "bridge"
 
     // ── Lifecycle States ──────────────────────────────────────────────────
@@ -61,18 +61,20 @@ object BridgeContract {
     const val WORKER_CMD_BLAKE3_HASH = "blake3_hash"
     const val WORKER_CMD_SIGN = "sign"
     const val WORKER_CMD_VERIFY = "verify"
-    const val WORKER_CMD_DB_SAVE = "db_save"
-    const val WORKER_CMD_DB_LOAD = "db_load"
-    const val WORKER_CMD_DB_DELETE = "db_delete"
+    const val WORKER_CMD_DB_PUT = "db_put"
+    const val WORKER_CMD_DB_GET = "db_get"
+    const val WORKER_CMD_DB_DEL = "db_del"
+    const val WORKER_CMD_DB_LIST = "db_list"
 
     val ALL_WORKER_COMMAND_TYPES = listOf(
         WORKER_CMD_INIT,
         WORKER_CMD_BLAKE3_HASH,
         WORKER_CMD_SIGN,
         WORKER_CMD_VERIFY,
-        WORKER_CMD_DB_SAVE,
-        WORKER_CMD_DB_LOAD,
-        WORKER_CMD_DB_DELETE,
+        WORKER_CMD_DB_PUT,
+        WORKER_CMD_DB_GET,
+        WORKER_CMD_DB_DEL,
+        WORKER_CMD_DB_LIST,
     )
 
     // ── Worker Result Types (worker → main) ──────────────────────────────
@@ -81,9 +83,10 @@ object BridgeContract {
     const val WORKER_RES_BLAKE3_RESULT = "blake3_result"
     const val WORKER_RES_SIGN_RESULT = "sign_result"
     const val WORKER_RES_VERIFY_RESULT = "verify_result"
-    const val WORKER_RES_DB_SAVE_RESULT = "db_save_result"
-    const val WORKER_RES_DB_LOAD_RESULT = "db_load_result"
-    const val WORKER_RES_DB_DELETE_RESULT = "db_delete_result"
+    const val WORKER_RES_DB_PUT_RESULT = "db_put_result"
+    const val WORKER_RES_DB_GET_RESULT = "db_get_result"
+    const val WORKER_RES_DB_DEL_RESULT = "db_del_result"
+    const val WORKER_RES_DB_LIST_RESULT = "db_list_result"
     const val WORKER_RES_ERROR = "error"
     const val WORKER_RES_LOG = "log"
 
@@ -92,9 +95,10 @@ object BridgeContract {
         WORKER_RES_BLAKE3_RESULT,
         WORKER_RES_SIGN_RESULT,
         WORKER_RES_VERIFY_RESULT,
-        WORKER_RES_DB_SAVE_RESULT,
-        WORKER_RES_DB_LOAD_RESULT,
-        WORKER_RES_DB_DELETE_RESULT,
+        WORKER_RES_DB_PUT_RESULT,
+        WORKER_RES_DB_GET_RESULT,
+        WORKER_RES_DB_DEL_RESULT,
+        WORKER_RES_DB_LIST_RESULT,
         WORKER_RES_ERROR,
         WORKER_RES_LOG,
     )
