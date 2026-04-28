@@ -1,0 +1,61 @@
+/*
+ * Home screen — KERI Wallet web payload
+ *
+ * Status card, badge, and home-specific layout.
+ */
+
+.status-card {
+  padding: var(--space-lg);
+  background: var(--panel-dark);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: var(--space-md);
+}
+
+.theme-light .status-card {
+  background: var(--panel-light);
+  border-color: var(--line-light);
+}
+
+.status-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.status-card-header h2 {
+  font-size: var(--font-title-2);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--font-footnote);
+  font-weight: 600;
+  color: var(--text-muted-dark);
+}
+
+.theme-light .status-badge {
+  color: var(--text-muted-light);
+}
+
+.status-card p {
+  color: var(--text-muted-dark);
+  font-size: var(--font-subhead);
+}
+
+.theme-light .status-card p {
+  color: var(--text-muted-light);
+}
+
+.vault-name-display {
+  font-size: var(--font-title-1);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--keri-gold);
+}

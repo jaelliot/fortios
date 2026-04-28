@@ -1,0 +1,73 @@
+/*
+ * Design tokens — KERI Wallet web payload
+ *
+ * Single source of truth for brand colors, spacing, typography, and layout
+ * constants. All other CSS files import values from here via custom properties.
+ *
+ * Brand colors: see branding-visual-identity.instructions.md
+ * iOS type ramp: matches Apple HIG Dynamic Type sizes at default scaling
+ * Shell chrome heights: match iOS tab bar (49pt) and compact header (52pt)
+ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────────────────── */
+  --keri-green: #61783e;
+  --keri-gold: #986c32;
+  --keri-black: #000000;
+
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  --bg-dark: #0d0d0f;
+  --bg-dark-soft: #131316;
+  --bg-light: #f4f2ec;
+  --panel-dark: rgba(255, 255, 255, 0.06);
+  --panel-light: rgba(255, 255, 255, 0.72);
+  --line-dark: rgba(255, 255, 255, 0.08);
+  --line-light: rgba(32, 32, 36, 0.08);
+
+  /* ── Text ──────────────────────────────────────────────────────────── */
+  --text-dark: #ece7dc;
+  --text-light: #1d1d1f;
+  --text-muted-dark: #b6b0a4;
+  --text-muted-light: #68645c;
+
+  /* ── Status ────────────────────────────────────────────────────────── */
+  --status-pending: #ff9f0a;
+  --status-error: #ff453a;
+  --status-done: var(--keri-green);
+
+  /* ── Spacing ───────────────────────────────────────────────────────── */
+  --space-2xs: 6px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* ── Radii ─────────────────────────────────────────────────────────── */
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+
+  /* ── Shadows ───────────────────────────────────────────────────────── */
+  --shadow-soft: 0 18px 45px rgba(0, 0, 0, 0.22);
+
+  /* ── Motion ────────────────────────────────────────────────────────── */
+  --fade-duration: 0.4s;
+
+  /* ── iOS type ramp ─────────────────────────────────────────────────── */
+  --font-large-title: 34px;
+  --font-title-1: 28px;
+  --font-title-2: 22px;
+  --font-title-3: 20px;
+  --font-headline: 17px;
+  --font-body: 17px;
+  --font-callout: 16px;
+  --font-subhead: 15px;
+  --font-footnote: 13px;
+  --font-caption: 12px;
+
+  /* ── Shell chrome ──────────────────────────────────────────────────── */
+  --header-height: 52px;
+  --tab-bar-height: 49px;
+}
