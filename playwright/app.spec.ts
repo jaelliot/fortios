@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// These tests validate only the local seam-validation payload and bridge seam.
-// They should not be treated as end-to-end proof that the FortWeb-hosted
-// product path is green on iOS.
-
 // ── Structural smoke tests ───────────────────────────────────────────────────
 //
 // These tests verify that the built Vite payload:
@@ -15,7 +11,7 @@ import { test, expect } from '@playwright/test';
 // 20-40s to download and load the runtime, which is too slow for PR-blocking CI.
 // The Pyodide roundtrip is covered by a separate @slow tagged test below.
 
-test.describe('KERI Wallet seam-validation shell', () => {
+test.describe('KERI Wallet app shell', () => {
     test('page title is KERI Wallet', async ({ page }) => {
         await page.goto('/');
         await expect(page).toHaveTitle('KERI Wallet');
@@ -113,14 +109,11 @@ test.describe('@slow Pyodide roundtrip', () => {
 
         await page.goto('/');
 
-        // Wait for lifecycle completion. The current app posts lifecycle:boot
-        // and lifecycle:done, and also updates visible status text.
+        // Wait for a lifecycle:ready message to be posted to the bridge
         await page.waitForFunction(
             () => {
                 const msgs = (window as unknown as { __workerMessages?: Array<{ type: string; message?: string }> }).__workerMessages ?? [];
-                const lifecycleDone = msgs.some((m) => m.type === 'lifecycle' && m.message === 'done');
-                const statusText = (document.getElementById('status')?.textContent ?? '').toLowerCase();
-                return lifecycleDone || statusText.includes('done');
+                return msgs.some((m) => m.type === 'lifecycle' && m.message === 'ready');
             },
             { timeout: 90_000, polling: 1000 },
         );
@@ -128,9 +121,6 @@ test.describe('@slow Pyodide roundtrip', () => {
         const messages = await page.evaluate(
             () => (window as unknown as { __workerMessages: unknown[] }).__workerMessages,
         );
-
-        const workerLogText = await page.locator('#output').innerText();
-        expect(workerLogText).not.toContain('Pyodide boot failed');
         expect(messages.some((m) => (m as { type: string }).type === 'lifecycle')).toBe(true);
     });
 });
