@@ -39,16 +39,8 @@ final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
 
-        let requestPath = requestPath(for: url)
-        if isInitialDocumentPath(requestPath) {
-            AppLogger.notice(
-                "[SchemeHandler] start initial document path=\(requestPath)",
-                category: AppConfig.Log.schemeHandler)
-        } else {
-            AppLogger.debug(
-                "[SchemeHandler] start path=\(requestPath)",
-                category: AppConfig.Log.schemeHandler)
-        }
+        AppLogger.info(
+            "[SchemeHandler] start: \(url.absoluteString)", category: AppConfig.Log.schemeHandler)
 
         do {
 
@@ -71,7 +63,7 @@ final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
             urlSchemeTask.didFinish()
         } catch {
             AppLogger.warning(
-                "[SchemeHandler] failed path=\(requestPath) error=\(String(describing: error))",
+                "[SchemeHandler] failed: \(String(describing: error)) url=\(url.absoluteString)",
                 category: AppConfig.Log.schemeHandler)
             urlSchemeTask.didFailWithError(error)
         }
@@ -119,15 +111,9 @@ final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
         for (key, value) in AppConfig.HTTP.crossOriginHeaders {
             allHeaders[key] = value
         }
-        if isInitialDocumentPath(relPath) {
-            AppLogger.notice(
-                "[SchemeHandler] served initial document path=\(relPath) bytes=\(data.count)",
-                category: AppConfig.Log.schemeHandler)
-        } else {
-            AppLogger.debug(
-                "[SchemeHandler] served path=\(relPath) mime=\(mime) bytes=\(data.count)",
-                category: AppConfig.Log.schemeHandler)
-        }
+        AppLogger.info(
+            "[SchemeHandler] served \(relPath) mime=\(mime) bytes=\(data.count)",
+            category: AppConfig.Log.schemeHandler)
         return (data, mime, allHeaders)
     }
 
@@ -147,14 +133,5 @@ final class PayloadSchemeHandler: NSObject, WKURLSchemeHandler {
         }
 
         return parts.joined(separator: "/")
-    }
-
-    private func requestPath(for url: URL) -> String {
-        url.path.isEmpty ? "/" : url.path
-    }
-
-    private func isInitialDocumentPath(_ path: String) -> Bool {
-        path == "/" || path == AppConfig.Scheme.defaultIndexPath
-            || path == "/\(AppConfig.Scheme.defaultIndexPath)"
     }
 }

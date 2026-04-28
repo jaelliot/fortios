@@ -119,19 +119,22 @@ enum AppConfig {
         // Dark mode: --bg-dark: #0d0d0f  → RGB(13, 13, 15)
         static let darkBackground = UIColor(
             red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 15.0 / 255.0, alpha: 1)
-        // Light mode: --ref-neutral-10: #f7f8f4 → RGB(247, 248, 244)
+        // Light mode: --bg-light: #f5f5f7 → RGB(245, 245, 247)
         static let lightBackground = UIColor(
-            red: 247.0 / 255.0, green: 248.0 / 255.0, blue: 244.0 / 255.0, alpha: 1)
+            red: 245.0 / 255.0, green: 245.0 / 255.0, blue: 247.0 / 255.0, alpha: 1)
     }
 
-    // MARK: - Host Appearance
+    // MARK: - Demo / Debug
 
-    /// The FortWeb-backed shell is currently light-only. Keep the native container,
-    /// safe-area background, and status bar in the matching host appearance until
-    /// the web payload exposes an appearance bridge to native.
-    enum Appearance {
-        static let interfaceStyle: UIUserInterfaceStyle = .light
-        static let statusBarStyle: UIStatusBarStyle = .darkContent
-        static let backgroundColor = Brand.lightBackground
-    }
+    #if DEBUG
+        enum Demo {
+            /// Seconds after initial load before the demo crypto operation fires.
+            /// Conservative for Simulator; production should use bridge lifecycle messages.
+            static let cryptoDispatchDelay: TimeInterval = 8.0
+            /// The worker command type for the demo operation.
+            static let operationType = "blake3_hash"
+            /// Data payload for the demo hash.
+            static let hashData = "hello from swift"
+        }
+    #endif
 }
