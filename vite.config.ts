@@ -10,16 +10,17 @@ const crossOriginHeaders = {
 
 export default defineConfig({
     // Relative base so the same `dist/` works when served from a custom scheme
-    // via WKURLSchemeHandler (e.g., app://local/index.html).
+    // via WKURLSchemeHandler (e.g., keriwasm://localhost/).
     base: './',
     build: {
         outDir: 'dist',
         emptyOutDir: true,
     },
-    // WKWebView (iOS ≤ 17) does not support ES module workers.
-    // IIFE format compiles to a classic worker that can be spawned with `new Worker(url)`.
+    // Pyodide 0.29 ships as an ES module runtime. Keep the worker bundle in ES format
+    // so the main thread can spawn it with `type: 'module'` and the worker can import
+    // the bundled `dist/pyodide/pyodide.mjs` asset without a classic-worker shim.
     worker: {
-        format: 'iife',
+        format: 'es',
     },
     server: {
         headers: crossOriginHeaders,
