@@ -199,6 +199,7 @@ parity-smoke: require-device-ref sync isolate-sim run-sim run-device parity-mani
 	@echo "Next manual step: on both destinations tap 'Seed Test Data' then 'List Identifiers' and compare the visible result plus logs."
 
 test-swift: ## Run Swift unit + UI tests on iOS Simulator
+	rm -rf $(TEST_RESULTS)
 	xcodebuild test \
 	  -project $(XCODE_PROJECT) \
 	  -scheme $(SCHEME) \
