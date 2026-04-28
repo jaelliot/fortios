@@ -26,7 +26,8 @@ export default defineConfig({
             // bypassCSP is intentionally false — we want production CSP behaviour.
         },
     },
-    // CI: single worker, no retries.
+    // CI: single worker, one retry to separate transient browser boot flakes
+    // from deterministic failures.
     fullyParallel: false,
     workers: 1,
     retries: process.env['CI'] ? 1 : 0,
