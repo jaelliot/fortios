@@ -14,10 +14,10 @@
 //   kv.ts             — owns the WorkerKV interface and IndexedDB implementation
 //
 
-import type { KVFactory, WorkerKV } from './kv';
+import type { KVFactory } from './kv';
 import type { PyodideInterface, WorkerInbound, WorkerOutbound } from './types';
 
-// Re-export WorkerKV so existing consumers that import from worker_router still work.
+// Re-export KVFactory so existing consumers that import from worker_router still work.
 export { openIdbKVFactory } from './kv';
 export type { KVFactory, WorkerKV } from './kv';
 
@@ -79,11 +79,6 @@ _vresult
 
 const IDB_UNAVAILABLE = 'IndexedDB not available (ephemeral mode)';
 
-function requireKV(store: string, kvFactory: KVFactory | null): WorkerKV {
-    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
-    return kvFactory(store);
-}
-
 export async function handleDbPut(
     id: string,
     store: string,
@@ -91,8 +86,8 @@ export async function handleDbPut(
     value: string,
     kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    const kv = requireKV(store, kvFactory);
-    await kv.set(key, value);
+    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
+    await kvFactory.kv(store).set(key, value);
     return { id, type: 'db_put_result', ok: true };
 }
 
@@ -102,8 +97,8 @@ export async function handleDbGet(
     key: string,
     kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    const kv = requireKV(store, kvFactory);
-    const value = await kv.get(key);
+    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
+    const value = await kvFactory.kv(store).get(key);
     return { id, type: 'db_get_result', value };
 }
 
@@ -113,8 +108,8 @@ export async function handleDbDel(
     key: string,
     kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    const kv = requireKV(store, kvFactory);
-    const ok = await kv.del(key);
+    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
+    const ok = await kvFactory.kv(store).del(key);
     return { id, type: 'db_del_result', ok };
 }
 
@@ -124,8 +119,8 @@ export async function handleDbList(
     prefix: string,
     kvFactory: KVFactory | null,
 ): Promise<WorkerOutbound> {
-    const kv = requireKV(store, kvFactory);
-    const entries = await kv.list(prefix);
+    if (!kvFactory) throw new Error(IDB_UNAVAILABLE);
+    const entries = await kvFactory.kv(store).list(prefix);
     return { id, type: 'db_list_result', entries };
 }
 
@@ -138,7 +133,7 @@ export async function handleDbList(
  * or `false` when the worker is not yet initialised produces an `error` result
  * rather than throwing, so `self.onmessage` never rejects.
  *
- * `kvFactory` is the pure-JS IndexedDB key-value store factory (or `null` in ephemeral mode).
+ * `kvFactory` is the store-scoped IndexedDB factory (or `null` in ephemeral mode).
  *
  * The `init` command is intentionally NOT handled here — it belongs to the
  * boot lifecycle in `pyodide_worker.ts`.
