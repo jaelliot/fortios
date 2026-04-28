@@ -20,15 +20,14 @@ enum LogLevel: Int, Comparable {
     case verbose = 0
     case debug = 1
     case info = 2
-    case notice = 3
-    case warning = 4
-    case error = 5
+    case warning = 3
+    case error = 4
 
     var osLogType: OSLogType {
         switch self {
         case .verbose, .debug: return .debug
         case .info: return .info
-        case .notice, .warning: return .default
+        case .warning: return .default
         case .error: return .error
         }
     }
@@ -38,7 +37,6 @@ enum LogLevel: Int, Comparable {
         case .verbose: return "VERBOSE"
         case .debug: return "DEBUG"
         case .info: return "INFO"
-        case .notice: return "NOTICE"
         case .warning: return "WARNING"
         case .error: return "ERROR"
         }
@@ -64,12 +62,6 @@ enum LogPrivacy {
 
 // MARK: - AppLogger
 
-struct LogBreadcrumb: Equatable {
-    let level: LogLevel
-    let category: String
-    let message: String
-}
-
 final class AppLogger {
 
     // MARK: Configuration
@@ -85,9 +77,6 @@ final class AppLogger {
     /// Lazily cached OSLog instances keyed by category string.
     private static var osLogCache: [String: OSLog] = [:]
     private static let cacheLock = NSLock()
-    private static let breadcrumbLimit = 100
-    private static var breadcrumbBuffer: [LogBreadcrumb] = []
-    private static let breadcrumbLock = NSLock()
 
     private init() {}
 
@@ -102,16 +91,6 @@ final class AppLogger {
         return log
     }
 
-    private static func appendBreadcrumb(level: LogLevel, category: String, message: String) {
-        breadcrumbLock.lock()
-        defer { breadcrumbLock.unlock() }
-
-        breadcrumbBuffer.append(LogBreadcrumb(level: level, category: category, message: message))
-        if breadcrumbBuffer.count > breadcrumbLimit {
-            breadcrumbBuffer.removeFirst(breadcrumbBuffer.count - breadcrumbLimit)
-        }
-    }
-
     // MARK: Public API
 
     static func verbose(
@@ -123,7 +102,7 @@ final class AppLogger {
         line: Int = #line
     ) {
         log(
-            level: .verbose, message: message, category: category,
+            level: .verbose, message: message(), category: category,
             privacy: privacy, file: file, function: function, line: line)
     }
 
@@ -136,7 +115,7 @@ final class AppLogger {
         line: Int = #line
     ) {
         log(
-            level: .debug, message: message, category: category,
+            level: .debug, message: message(), category: category,
             privacy: privacy, file: file, function: function, line: line)
     }
 
@@ -149,20 +128,7 @@ final class AppLogger {
         line: Int = #line
     ) {
         log(
-            level: .info, message: message, category: category,
-            privacy: privacy, file: file, function: function, line: line)
-    }
-
-    static func notice(
-        _ message: @autoclosure () -> String,
-        category: String = AppConfig.Log.defaultCategory,
-        privacy: LogPrivacy = .auto,
-        file: String = #file,
-        function: String = #function,
-        line: Int = #line
-    ) {
-        log(
-            level: .notice, message: message, category: category,
+            level: .info, message: message(), category: category,
             privacy: privacy, file: file, function: function, line: line)
     }
 
@@ -175,7 +141,7 @@ final class AppLogger {
         line: Int = #line
     ) {
         log(
-            level: .warning, message: message, category: category,
+            level: .warning, message: message(), category: category,
             privacy: privacy, file: file, function: function, line: line)
     }
 
@@ -188,29 +154,13 @@ final class AppLogger {
         function: String = #function,
         line: Int = #line
     ) {
+        var fullMessage = message()
+        if let error {
+            fullMessage += " | Error: \(error.localizedDescription)"
+        }
         log(
-            level: .error,
-            message: {
-                var fullMessage = message()
-                if let error {
-                    fullMessage += " | Error: \(error.localizedDescription)"
-                }
-                return fullMessage
-            },
-            category: category,
+            level: .error, message: fullMessage, category: category,
             privacy: privacy, file: file, function: function, line: line)
-    }
-
-    static func retainedBreadcrumbs() -> [LogBreadcrumb] {
-        breadcrumbLock.lock()
-        defer { breadcrumbLock.unlock() }
-        return breadcrumbBuffer
-    }
-
-    static func resetRetainedBreadcrumbs() {
-        breadcrumbLock.lock()
-        defer { breadcrumbLock.unlock() }
-        breadcrumbBuffer.removeAll(keepingCapacity: true)
     }
 
     // MARK: Core implementation
@@ -218,7 +168,7 @@ final class AppLogger {
     // swiftlint:disable:next function_parameter_count
     private static func log(
         level: LogLevel,
-        message: () -> String,
+        message: String,
         category: String,
         privacy: LogPrivacy,
         file: String,
@@ -226,17 +176,15 @@ final class AppLogger {
         line: Int
     ) {
         guard level >= minimumLogLevel else { return }
-        let rawMessage = message()
-        appendBreadcrumb(level: level, category: category, message: rawMessage)
 
         let formattedMessage: String
         #if DEBUG
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let fileName = (file as NSString).lastPathComponent
             formattedMessage =
-                "\(timestamp) \(level.name) [\(fileName):\(line)] \(function) > \(rawMessage)"
+                "\(timestamp) \(level.name) [\(fileName):\(line)] \(function) > \(message)"
         #else
-            formattedMessage = rawMessage
+            formattedMessage = message
         #endif
 
         let logger = osLog(for: category)
