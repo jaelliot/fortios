@@ -57,9 +57,9 @@ test-e2e-slow: ## Run all E2E tests including slow Pyodide roundtrip (120s timeo
 	npm run build
 	npx playwright test
 
-bridge-check: ## Verify bridge-contract.ts, BridgeContract.swift, and BridgeContract.kt are up to date
+bridge-check: ## Verify bridge-contract.ts, BridgeContract.swift, and BridgeContract.kt match JSON (Kotlin is gitignored; npm check still validates it on disk)
 	npm run bridge:check
-	git diff --exit-code src/bridge-contract.ts xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift generated/BridgeContract.kt
+	git diff --exit-code src/bridge-contract.ts xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift
 
 lint-ts: ## Run TypeScript type check (tsc --noEmit)
 	npm run typecheck

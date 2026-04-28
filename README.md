@@ -141,7 +141,7 @@ Run `make help` at any time to list all available targets.
 | `make test-e2e` | Run Playwright structural tests (excludes `@slow` Pyodide boot tests) |
 | `make test-e2e-slow` | Run all Playwright tests including the 120 s Pyodide roundtrip |
 | `make test-all` | Run `test-swift` + `test-ts` + `test-e2e` in sequence |
-| `make bridge-check` | Verify `bridge-contract.ts` and `BridgeContract.swift` match `bridge-contract.json` |
+| `make bridge-check` | Verify `bridge-contract.ts` + `BridgeContract.swift` match JSON; `bridge:check` also validates Kotlin on disk |
 | `make clean` | Remove `build/DerivedData`, `test-results/`, and `dist/` |
 
 ---
@@ -259,10 +259,10 @@ make test-all   # test-swift + test-ts + test-e2e
 The JS↔native bridge is governed by a typed contract so all sides stay in sync.
 
 - **Source of truth:** `bridge-contract.json` (committed)
-- **Generated:** `src/bridge-contract.ts` (TypeScript), `KeriWallet/BridgeContract.swift` (Swift), and `generated/BridgeContract.kt` (Kotlin for Fort-android)
-- **Verify sync:** `make bridge-check` (exits non-zero if generated output differs from committed JSON)
+- **Generated:** `src/bridge-contract.ts` (TypeScript), `KeriWallet/BridgeContract.swift` (Swift), and `generated/BridgeContract.kt` (Kotlin for Fort-android — **not committed**; run `npm run prebuild` or `npm ci` before Android `sync-payload.sh` copies it)
+- **Verify sync:** `make bridge-check` runs `npm run bridge:check` (all three languages) then `git diff` on the **tracked** TS + Swift outputs only
 
-The `prebuild` npm hook regenerates both files automatically before every build. In CI, `make bridge-check` must pass before tests run.
+The `prebuild` npm hook regenerates all contract files automatically before every build. In CI, `make bridge-check` must pass before tests run.
 
 Message envelope shape (JS → Swift):
 
@@ -284,7 +284,7 @@ Fort-ios/
 │   ├── bridge-contract.ts      # Generated — do not edit by hand
 │   └── __tests__/              # Vitest unit tests
 ├── generated/
-│   └── BridgeContract.kt       # Generated Kotlin constants (for Fort-android)
+│   └── BridgeContract.kt       # Generated Kotlin (gitignored — produced beside TS/Swift)
 ├── public/
 │   └── pyodide/                # Gitignored — populated by `make pyodide`
 ├── playwright/
