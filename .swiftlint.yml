@@ -1,7 +1,7 @@
 # ── SwiftLint Configuration ─────────────────────────────────────────────────
 # Rationale: ADR-028 — iOS SwiftLint & Type-Inference Strategy
 # Installed via: brew install swiftlint (v0.63.2+)
-# Run:          make lint   (from projects/ios-wrapper/)
+# Run:          make lint   (from libs/Fort-ios/)
 # VS Code:      vknabel.vscode-swiftlint extension runs on save
 # ────────────────────────────────────────────────────────────────────────────
 
