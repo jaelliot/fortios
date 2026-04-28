@@ -42,6 +42,12 @@ export interface KVFactory {
     close(): void;
 }
 
+function validateStoreName(store: string): void {
+    if (store.includes('/')) {
+        throw new Error('Invalid store name: "/" is not allowed.');
+    }
+}
+
 /**
  * Open an IndexedDB-backed KVFactory.
  *
@@ -100,6 +106,7 @@ export async function openIdbKVFactory(
     }
 
     function makeStoreKV(store: string): WorkerKV {
+        validateStoreName(store);
         const storePrefix = `${store}/`;
 
         return {
