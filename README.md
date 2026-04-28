@@ -125,7 +125,7 @@ make logs-device DEVICE_REF=<udid-or-name>
 
 The default wrapper targets now stage FortWeb automatically. Use `PAYLOAD_SOURCE=fort-ios` only when you intentionally want the legacy proof harness, for example `PAYLOAD_SOURCE=fort-ios make dev-sim`.
 
-For conference acceptance and simulator/device parity runs, use [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](libs/Fort-ios/CONFERENCE-IOS-VALIDATION-CHECKLIST.md).
+For conference acceptance and simulator/device parity runs, use [CONFERENCE-IOS-VALIDATION-CHECKLIST.md](CONFERENCE-IOS-VALIDATION-CHECKLIST.md).
 
 Run `make help` at any time to list all available targets.
 

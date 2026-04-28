@@ -32,7 +32,7 @@ SIMULATOR_DEST := platform=iOS Simulator,name=$(SIMULATOR_NAME),OS=$(SIMULATOR_O
 endif
 endif
 
-.PHONY: help setup pyodide sync ios-doctor ios-list-sims ios-list-devices require-simulator require-device-ref isolate-sim focus-sim build build-sim install-sim launch-sim run-sim build-device install-device launch-device run run-device dev-sim dev-device logs-sim logs-device open-console parity-manifest parity-smoke test-swift test-ts test-e2e test-e2e-slow test-all bridge-check lint lint-ts open clean archive export upload
+.PHONY: help setup pyodide sync sync-fortweb sync-fortios ios-doctor ios-list-sims ios-list-devices require-simulator require-device-ref isolate-sim focus-sim build build-sim install-sim launch-sim run-sim build-device install-device launch-device run run-device dev-sim dev-device logs-sim logs-device open-console parity-manifest parity-smoke test-swift test-ts test-e2e test-e2e-slow test-all bridge-check lint lint-ts open clean archive export upload
 
 help: ## Show available make targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -79,6 +79,15 @@ ios-doctor: ## Show local Xcode, simulator, and physical-device readiness
 	@echo "Selected simulator destination: $(SIMULATOR_DEST)"
 	@echo "Resolved simulator device: $(if $(SIMULATOR_DEVICE),$(SIMULATOR_DEVICE),<unresolved>)"
 	@echo "Selected physical device ref: $(if $(DEVICE_REF),$(DEVICE_REF),<unset>)"
+	@printf '\nPayload source:\n'
+	@echo "payload-source=$(PAYLOAD_SOURCE)"
+	@command -v xcodebuild >/dev/null || (echo "ERROR: xcodebuild not found" && exit 1)
+	@command -v xcrun >/dev/null || (echo "ERROR: xcrun not found" && exit 1)
+	@if [ "$(PAYLOAD_SOURCE)" = "fortweb" ]; then \
+		[ -d "$(FORTWEB_DIR)" ] || (echo "ERROR: FortWeb repo not found at $(FORTWEB_DIR)" && exit 1); \
+		[ -f "$(FORTWEB_DIR)/app/index.html" ] || (echo "ERROR: FortWeb app/index.html missing" && exit 1); \
+		[ -f "$(FORTWEB_DIR)/pyscript-ci.toml" ] || (echo "ERROR: FortWeb pyscript-ci.toml missing" && exit 1); \
+	fi
 	@printf '\nXcode:\n'
 	@xcode-select --version
 	@xcode-select --print-path
