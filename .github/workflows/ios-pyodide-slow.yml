@@ -1,0 +1,52 @@
+name: iOS Slow Pyodide Checks
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 10 * * *'
+
+jobs:
+  pyodide-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: Check out KeriWasm dependency
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          repository: WebOfTrust/KeriWasm
+          path: .deps/keriwasm
+
+      - name: Check out Locksmith dependency
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          repository: keri-foundation/locksmith
+          path: .deps/locksmith
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+        with:
+          node-version: '22.12.0'
+          cache: npm
+
+      - name: Build slow-lane payload
+        env:
+          PAYLOAD_SOURCE: fort-ios
+          KERIWASM_DIR: ${{ github.workspace }}/.deps/keriwasm
+          KERIWASM_PYTHON_DIR: ${{ github.workspace }}/.deps/keriwasm/python
+          LOCKSMITH_PYTHON_DIR: ${{ github.workspace }}/.deps/locksmith/src/locksmith
+        run: |
+          make pyodide
+          make sync
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run slow Pyodide roundtrip
+        run: npx playwright test --grep "@slow"
