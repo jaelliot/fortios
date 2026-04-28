@@ -2,26 +2,41 @@
 
 XCODE_PROJECT := xcodeproj/KeriWallet/KeriWallet.xcodeproj
 SCHEME        := KeriWallet
-APP_BUNDLE_ID := com.kerifoundation.wallet
-PAYLOAD_SOURCE ?= fortweb
-FORTWEB_DIR   ?= ../fortweb
-SIMULATOR_NAME ?= iPhone 17 Pro
-SIMULATOR     := platform=iOS Simulator,name=$(SIMULATOR_NAME)
-SIM_DERIVED_DATA := build/DerivedData-sim
-DEVICE_DERIVED_DATA := build/DerivedData-device
-TEST_RESULTS  := build/TestResults.xcresult
+SIMULATOR_NAME ?= iPhone 16e
+SIMULATOR_OS   ?= 18.6
+SIMULATOR_UDID ?=
+DEVICE_REF    ?=
+DERIVED_DATA_ROOT := build/DerivedData
+DERIVED_DATA_SIM := $(DERIVED_DATA_ROOT)/Simulator
+DERIVED_DATA_DEVICE := $(DERIVED_DATA_ROOT)/Device
+TEST_RESULTS  := build/TestResults-sim.xcresult
 ARCHIVE_PATH  := build/KeriWallet.xcarchive
 EXPORT_DIR    := build/export
 EXPORT_OPTS   := ExportOptions.plist
-SIM_APP_PATH  := $(SIM_DERIVED_DATA)/Build/Products/Debug-iphonesimulator/KeriWallet.app
-DEVICE_APP_PATH := $(DEVICE_DERIVED_DATA)/Build/Products/Debug-iphoneos/KeriWallet.app
-DEVICE_REF    ?=
+APP_BUNDLE_ID := com.kerifoundation.wallet
+SIM_APP       := $(DERIVED_DATA_SIM)/Build/Products/Debug-iphonesimulator/KeriWallet.app
+DEVICE_APP    := $(DERIVED_DATA_DEVICE)/Build/Products/Debug-iphoneos/KeriWallet.app
+PAYLOAD_MANIFEST := WebPayload/build-manifest.json
+PAYLOAD_SOURCE ?= fortweb
+FORTWEB_DIR ?= ../fortweb
 
-.PHONY: help setup pyodide sync sync-fortweb ios-doctor ios-list-sims ios-list-devices dev-sim run-sim dev-device run-device parity-smoke logs-sim logs-device build test-swift test-ts test-e2e test-e2e-slow test-all bridge-check lint lint-ts open clean archive export upload
+ifneq ($(strip $(SIMULATOR_UDID)),)
+SIMULATOR_DEST := platform=iOS Simulator,id=$(SIMULATOR_UDID),arch=arm64
+SIMULATOR_DEVICE := $(SIMULATOR_UDID)
+else
+SIMULATOR_DEVICE := $(shell bash scripts/resolve-simulator-udid.sh "$(SIMULATOR_NAME)" "$(SIMULATOR_OS)" 2>/dev/null)
+ifneq ($(strip $(SIMULATOR_DEVICE)),)
+SIMULATOR_DEST := platform=iOS Simulator,id=$(SIMULATOR_DEVICE),arch=arm64
+else
+SIMULATOR_DEST := platform=iOS Simulator,name=$(SIMULATOR_NAME),OS=$(SIMULATOR_OS)
+endif
+endif
+
+.PHONY: help setup pyodide sync ios-doctor ios-list-sims ios-list-devices require-simulator require-device-ref isolate-sim focus-sim build build-sim install-sim launch-sim run-sim build-device install-device launch-device run run-device dev-sim dev-device logs-sim logs-device open-console parity-manifest parity-smoke test-swift test-ts test-e2e test-e2e-slow test-all bridge-check lint lint-ts open clean archive export upload
 
 help: ## Show available make targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # ── Shared targets (platform-agnostic — reusable by Fort-android) ─────────────
 
@@ -39,12 +54,12 @@ test-e2e: ## Run Playwright E2E tests (excludes @slow Pyodide tests)
 	npx playwright test --grep-invert "@slow"
 
 test-e2e-slow: ## Run all E2E tests including slow Pyodide roundtrip (120s timeout)
-	bash build-payload.sh
+	npm run build
 	npx playwright test
 
-bridge-check: ## Verify bridge-contract.ts, BridgeContract.swift, and BridgeContract.kt are up to date
+bridge-check: ## Verify bridge-contract.ts, BridgeContract.swift, and BridgeContract.kt match JSON (Kotlin is gitignored; npm check still validates it on disk)
 	npm run bridge:check
-	git diff --exit-code src/bridge-contract.ts xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift generated/BridgeContract.kt
+	git diff --exit-code src/bridge-contract.ts xcodeproj/KeriWallet/KeriWallet/BridgeContract.swift
 
 lint-ts: ## Run TypeScript type check (tsc --noEmit)
 	npm run typecheck
@@ -57,90 +72,140 @@ sync: ## Build and sync the selected payload source (default: FortWeb convergenc
 sync-fortweb: ## Sync the FortWeb payload into WebPayload/ for the mainline convergence path
 	PAYLOAD_SOURCE=fortweb FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
-ios-list-sims: ## List available iOS Simulator destinations
-	xcrun simctl list devices available
+sync-fortios: ## Sync the blocked local Fort-ios proof shell into WebPayload/ (expected to fail closed)
+	PAYLOAD_SOURCE=fort-ios FORTWEB_DIR=$(FORTWEB_DIR) ./sync-payload.sh
 
-ios-list-devices: ## List CoreDevice-visible physical devices
-	xcrun devicectl list devices
-
-ios-doctor: ## Verify Xcode, simulator, and payload-source readiness
-	@command -v xcodebuild >/dev/null || (echo "ERROR: xcodebuild not found" && exit 1)
-	@command -v xcrun >/dev/null || (echo "ERROR: xcrun not found" && exit 1)
-	@echo "payload-source=$(PAYLOAD_SOURCE)"
-	@if [ "$(PAYLOAD_SOURCE)" = "fortweb" ]; then \
-		[ -d "$(FORTWEB_DIR)" ] || (echo "ERROR: FortWeb repo not found at $(FORTWEB_DIR)" && exit 1); \
-		[ -f "$(FORTWEB_DIR)/app/index.html" ] || (echo "ERROR: FortWeb app/index.html missing" && exit 1); \
-		[ -f "$(FORTWEB_DIR)/pyscript-ci.toml" ] || (echo "ERROR: FortWeb pyscript-ci.toml missing" && exit 1); \
+ios-doctor: ## Show local Xcode, simulator, and physical-device readiness
+	@echo "Selected simulator destination: $(SIMULATOR_DEST)"
+	@echo "Resolved simulator device: $(if $(SIMULATOR_DEVICE),$(SIMULATOR_DEVICE),<unresolved>)"
+	@echo "Selected physical device ref: $(if $(DEVICE_REF),$(DEVICE_REF),<unset>)"
+	@printf '\nXcode:\n'
+	@xcode-select --version
+	@xcode-select --print-path
+	@xcodebuild -version
+	@printf '\nSDKs:\n'
+	@xcrun --sdk iphoneos --show-sdk-version
+	@xcrun --sdk iphonesimulator --show-sdk-version
+	@printf '\nArchitecture:\n'
+	@uname -m
+	@printf '\nBooted simulators:\n'
+	@xcrun simctl list devices booted
+	@printf '\nPhysical devices:\n'
+	@xcrun devicectl list devices
+	@if [ -n "$(DEVICE_REF)" ]; then \
+	  printf '\nDevice details (%s):\n' "$(DEVICE_REF)"; \
+	  xcrun devicectl device info details --device "$(DEVICE_REF)"; \
 	fi
-	@xcrun simctl list devices available | grep -q "$(SIMULATOR_NAME)" || (echo "ERROR: Simulator '$(SIMULATOR_NAME)' not available" && exit 1)
-	@echo "simulator=$(SIMULATOR_NAME)"
-	@xcrun devicectl list devices >/dev/null 2>&1 || echo "warning: no physical device available via CoreDevice"
 
-dev-sim: sync lint-ts test-ts build ## Sync payload, run TS checks, and build for Simulator
+ios-list-sims: ## List available iPhone simulator destinations
+	@xcrun simctl list devices available | grep -E 'iPhone '
 
-run-sim: ## Boot, install, and launch on the configured Simulator
-	open -a Simulator || true
-	xcrun simctl boot "$(SIMULATOR_NAME)" || true
-	xcrun simctl bootstatus "$(SIMULATOR_NAME)" -b
-	xcrun simctl install booted "$(SIM_APP_PATH)"
-	xcrun simctl launch booted $(APP_BUNDLE_ID)
+ios-list-devices: ## List physical devices visible to Xcode CoreDevice
+	@xcrun devicectl list devices
 
-dev-device: sync ## Sync payload and build for a generic iOS device output
+require-simulator: ## Ensure the configured simulator resolves to a device identifier
+	@if [ -z "$(SIMULATOR_DEVICE)" ]; then \
+	  echo "ERROR: unable to resolve simulator $(SIMULATOR_NAME) on iOS $(SIMULATOR_OS)."; \
+	  echo "Run 'make ios-list-sims' or set SIMULATOR_UDID=<udid>."; \
+	  exit 1; \
+	fi
+
+require-device-ref: ## Ensure a physical device reference is provided
+	@if [ -z "$(DEVICE_REF)" ]; then \
+	  echo "ERROR: DEVICE_REF is required for physical-device install, launch, and parity flows."; \
+	  echo "Run 'make ios-list-devices' and retry with DEVICE_REF=<udid-or-name>."; \
+	  exit 1; \
+	fi
+
+isolate-sim: require-simulator ## Shut down other booted iOS simulators so parity runs target a single visible simulator
+	@python3 -c 'import json, subprocess, sys; target = sys.argv[1]; data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "booted", "--json"], text=True)); shutdown = []; [shutdown.extend(device["udid"] for device in devices if device.get("state") == "Booted" and device.get("udid") != target and device.get("isAvailable", True) and device.get("name", "").startswith("iPhone")) for runtime, devices in data.get("devices", {}).items() if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; print("No non-target booted iPhone simulators." if not shutdown else "Shutting down non-target iPhone simulators: " + ", ".join(shutdown)); [subprocess.run(["xcrun", "simctl", "shutdown", udid], check=True) for udid in shutdown]' "$(SIMULATOR_DEVICE)"
+
+focus-sim: require-simulator ## Boot, select, and foreground the configured simulator
+	@xcrun simctl boot "$(SIMULATOR_DEVICE)" >/dev/null 2>&1 || true
+	@xcrun simctl bootstatus "$(SIMULATOR_DEVICE)" -b
+	@open -a Simulator --args -CurrentDeviceUDID "$(SIMULATOR_DEVICE)"
+	@osascript -e 'tell application "Simulator" to activate' >/dev/null
+
+build-sim: require-simulator ## Build KeriWallet for iOS Simulator (Debug)
+	xcodebuild build \
+	  -project $(XCODE_PROJECT) \
+	  -scheme $(SCHEME) \
+	  -configuration Debug \
+	  -destination '$(SIMULATOR_DEST)' \
+	  -derivedDataPath $(DERIVED_DATA_SIM)
+
+build: build-sim ## Alias for simulator build
+
+install-sim: focus-sim build-sim ## Install the app onto the configured simulator
+	xcrun simctl install "$(SIMULATOR_DEVICE)" "$(SIM_APP)"
+
+launch-sim: focus-sim install-sim ## Launch the app on the configured simulator
+	xcrun simctl launch --terminate-running-process "$(SIMULATOR_DEVICE)" "$(APP_BUNDLE_ID)"
+
+run-sim: launch-sim ## Build, install, and launch on the configured simulator
+
+build-device: sync ## Build KeriWallet for generic iOS device output (Debug, auto-signing)
 	xcodebuild build \
 	  -project $(XCODE_PROJECT) \
 	  -scheme $(SCHEME) \
 	  -configuration Debug \
 	  -destination 'generic/platform=iOS' \
-	  -derivedDataPath $(DEVICE_DERIVED_DATA)
+	  -derivedDataPath $(DERIVED_DATA_DEVICE) \
+	  -allowProvisioningUpdates
 
-run-device: ## Install and launch on a physical device (use DEVICE_REF=<udid-or-name>)
-	@if [ -z "$(DEVICE_REF)" ]; then \
-		echo "ERROR: DEVICE_REF is required"; \
-		echo "Run: make ios-list-devices"; \
-		exit 1; \
+install-device: require-device-ref build-device ## Install the app onto the selected physical device
+	xcrun devicectl device install app --device "$(DEVICE_REF)" "$(DEVICE_APP)"
+
+launch-device: require-device-ref install-device ## Launch the app on the selected physical device
+	xcrun devicectl device process launch --device "$(DEVICE_REF)" --terminate-existing "$(APP_BUNDLE_ID)"
+
+run-device: launch-device ## Build, install, and launch on the selected physical device
+
+run: run-device ## Alias for physical-device run
+
+dev-sim: sync lint-ts test-ts build-sim ## Fast local loop: sync payload, validate TS, build for Simulator
+
+dev-device: sync lint-ts test-ts build-device ## Fast local loop: sync payload, validate TS, build for physical device
+
+logs-sim: ## Tail KeriWallet logs from the booted Simulator
+	xcrun simctl spawn booted log stream --style compact --predicate 'process == "KeriWallet"'
+
+logs-device: require-device-ref ## Print the device log workflow for the selected physical device
+	@echo "Device log capture is GUI-backed in the first pass." 
+	@echo "Open Console.app, select '$(DEVICE_REF)', then filter for process 'KeriWallet' or subsystem '$(APP_BUNDLE_ID)'."
+	@open -a Console
+
+open-console: ## Open macOS Console for physical device logs
+	open -a Console
+
+parity-manifest: build-sim build-device ## Compare bundled payload manifests across simulator and device builds
+	@if [ ! -f "$(PAYLOAD_MANIFEST)" ]; then \
+	  echo "ERROR: missing payload manifest at $(PAYLOAD_MANIFEST). Run 'make sync' first."; \
+	  exit 1; \
 	fi
-	xcrun devicectl device install app --device "$(DEVICE_REF)" "$(DEVICE_APP_PATH)"
-	xcrun devicectl device process launch --device "$(DEVICE_REF)" --terminate-existing $(APP_BUNDLE_ID)
-
-parity-smoke: ## Run the shared payload through simulator then device (requires DEVICE_REF)
-	@if [ -z "$(DEVICE_REF)" ]; then \
-		echo "ERROR: DEVICE_REF is required"; \
-		echo "Run: make ios-list-devices"; \
-		exit 1; \
+	@if [ ! -f "$(SIM_APP)/WebPayload/build-manifest.json" ]; then \
+	  echo "ERROR: simulator manifest missing from $(SIM_APP)."; \
+	  exit 1; \
 	fi
-	xcrun simctl shutdown all || true
-	$(MAKE) dev-sim PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR)
-	$(MAKE) run-sim PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR)
-	$(MAKE) dev-device PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR)
-	$(MAKE) run-device PAYLOAD_SOURCE=$(PAYLOAD_SOURCE) FORTWEB_DIR=$(FORTWEB_DIR) DEVICE_REF="$(DEVICE_REF)"
-
-logs-sim: ## Show recent simulator logs for KeriWallet
-	xcrun simctl spawn booted log show --style compact --last 10m --predicate 'subsystem == "com.kerifoundation.wallet" AND (category == "WebBridge" OR category == "WebContainer" OR category == "SchemeHandler" OR category == "WebNav")' | tail -n 200
-
-logs-device: ## Relaunch on device with console attached (use DEVICE_REF=<udid-or-name>)
-	@if [ -z "$(DEVICE_REF)" ]; then \
-		echo "ERROR: DEVICE_REF is required"; \
-		echo "Run: make ios-list-devices"; \
-		exit 1; \
+	@if [ ! -f "$(DEVICE_APP)/WebPayload/build-manifest.json" ]; then \
+	  echo "ERROR: device manifest missing from $(DEVICE_APP)."; \
+	  exit 1; \
 	fi
-	xcrun devicectl device process launch --device "$(DEVICE_REF)" --terminate-existing --console $(APP_BUNDLE_ID)
+	@python3 -c 'import json, sys; labels = ["payload", "simulator", "device"]; hashes = {label: json.load(open(path, "r", encoding="utf-8"))["dist_tree_sha256"] for label, path in zip(labels, sys.argv[1:])}; print("payload  ", hashes["payload"]); print("simulator", hashes["simulator"]); print("device   ", hashes["device"]); raise SystemExit(0 if len(set(hashes.values())) == 1 else "ERROR: payload manifest hash mismatch across destinations")' "$(PAYLOAD_MANIFEST)" "$(SIM_APP)/WebPayload/build-manifest.json" "$(DEVICE_APP)/WebPayload/build-manifest.json"
+	@echo "parity-manifest ok: all destinations reference the same payload hash"
 
-build: ## Build KeriWallet for iOS Simulator (Debug)
-	xcodebuild build \
-	  -project $(XCODE_PROJECT) \
-	  -scheme $(SCHEME) \
-	  -configuration Debug \
-	  -destination '$(SIMULATOR)' \
-	  -derivedDataPath $(SIM_DERIVED_DATA)
+parity-smoke: require-device-ref sync isolate-sim run-sim run-device parity-manifest ## Build, install, launch, and verify manifest parity for sim + device
+	@echo "parity-smoke ok: both destinations launched from the same payload hash."
+	@echo "Next manual step: on both destinations tap 'Seed Test Data' then 'List Identifiers' and compare the visible result plus logs."
 
 test-swift: ## Run Swift unit + UI tests on iOS Simulator
 	xcodebuild test \
 	  -project $(XCODE_PROJECT) \
 	  -scheme $(SCHEME) \
 	  -configuration Debug \
-	  -destination '$(SIMULATOR)' \
+	  -destination '$(SIMULATOR_DEST)' \
 	  -resultBundlePath $(TEST_RESULTS) \
-	  -derivedDataPath $(SIM_DERIVED_DATA) \
+	  -derivedDataPath $(DERIVED_DATA_SIM) \
 	  -parallel-testing-enabled NO
 
 test-all: test-swift test-ts test-e2e ## Run Swift + TS + E2E tests
@@ -152,7 +217,7 @@ lint: ## Run SwiftLint on all Swift sources (--strict)
 	cd $(CURDIR) && swiftlint lint --config .swiftlint.yml --strict
 
 clean: ## Remove build artifacts (DerivedData, test results, dist)
-	rm -rf $(SIM_DERIVED_DATA) $(DEVICE_DERIVED_DATA) $(TEST_RESULTS) $(ARCHIVE_PATH) $(EXPORT_DIR) dist
+	rm -rf $(DERIVED_DATA_ROOT) $(TEST_RESULTS) $(ARCHIVE_PATH) $(EXPORT_DIR) dist
 
 # ── TestFlight targets ────────────────────────────────────────────────────────
 
