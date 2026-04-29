@@ -102,10 +102,87 @@ jobs:
 
   swift-tests:
     runs-on: macos-15
+    env:
+      DERIVED_DATA_PATH: build/DerivedData/Simulator
+      TEST_RESULTS_PATH: build/TestResults-sim.xcresult
 
     steps:
       - name: Check out repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
+      - name: Check out FortWeb dependency
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          repository: keri-foundation/fortweb
+          path: .deps/fortweb
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+        with:
+          node-version: '22.12.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stage bundled WebPayload for wrapper tests
+        run: |
+          rm -rf WebPayload dist
+          PAYLOAD_SOURCE=fortweb \
+          FORTWEB_DIR="$GITHUB_WORKSPACE/.deps/fortweb" \
+          ./sync-payload.sh
+          test -f WebPayload/index.html
+          test -f WebPayload/build-manifest.json
+          test -f WebPayload/fortweb/app/index.html
+
       - name: Run Swift unit and UI tests
-        run: make test-swift
+        run: |
+          mapfile -t simulator_info < <(python3 - <<'PY'
+            import json
+            import subprocess
+
+            data = json.loads(
+                subprocess.check_output(
+                    ["xcrun", "simctl", "list", "devices", "available", "--json"],
+                    text=True,
+                )
+            )
+
+            for runtime in sorted(data.get("devices", {})):
+                if not runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-"):
+                    continue
+                for device in data["devices"][runtime]:
+                    if not device.get("isAvailable"):
+                        continue
+                    name = device.get("name", "")
+                    if not name.startswith("iPhone"):
+                        continue
+                    runtime_label = runtime.removeprefix("com.apple.CoreSimulator.SimRuntime.iOS-").replace("-", ".")
+                    print(device["udid"])
+                    print(f"{name} ({runtime_label})")
+                    raise SystemExit(0)
+
+            raise SystemExit("error: no available iPhone simulator found on runner")
+          PY
+          )
+
+          if [[ "${#simulator_info[@]}" -lt 2 ]]; then
+            echo "error: failed to resolve an available iPhone simulator" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          simulator_udid="${simulator_info[0]}"
+          simulator_label="${simulator_info[1]}"
+
+          echo "Using simulator: ${simulator_label} [${simulator_udid}]"
+          rm -rf "${DERIVED_DATA_PATH}" "${TEST_RESULTS_PATH}"
+
+          xcodebuild test \
+            -project xcodeproj/KeriWallet/KeriWallet.xcodeproj \
+            -scheme KeriWallet \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=${simulator_udid},arch=arm64" \
+            -resultBundlePath "${TEST_RESULTS_PATH}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            -parallel-testing-enabled NO

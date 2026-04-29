@@ -17,18 +17,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
-      - name: Check out KeriWasm dependency
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
-        with:
-          repository: WebOfTrust/KeriWasm
-          path: .deps/keriwasm
-
-      - name: Check out Locksmith dependency
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
-        with:
-          repository: keri-foundation/locksmith
-          path: .deps/locksmith
-
       - name: Set up Node
         uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
         with:
@@ -38,15 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build slow-lane payload
-        env:
-          PAYLOAD_SOURCE: fort-ios
-          KERIWASM_DIR: ${{ github.workspace }}/.deps/keriwasm
-          KERIWASM_PYTHON_DIR: ${{ github.workspace }}/.deps/keriwasm/python
-          LOCKSMITH_PYTHON_DIR: ${{ github.workspace }}/.deps/locksmith/src/locksmith
+      - name: Build slow-lane browser bundle
         run: |
           make pyodide
-          make sync
+          npm run build
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
