@@ -29,7 +29,7 @@ setup: ## Install Node dependencies for the web payload (run once after clone)
 	npm ci
 
 pyodide: ## Download Pyodide v0.29.1 runtime + crypto wheels (run once per machine)
-	bash scripts/download-pyodide.sh
+	FORTWEB_DIR="$(FORTWEB_DIR)" bash scripts/download-pyodide.sh
 
 test-ts: ## Run TypeScript unit tests (Vitest)
 	npm run test

@@ -8,7 +8,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-FORTWEB_DIR="$(cd "${PAYLOAD_DIR}/../../libs/fortweb" && pwd)"
+
+# FortWeb checkout (blake3 wheel under wheels/). Respect FORTWEB_DIR (CI, Makefile).
+# Otherwise: CI-style .deps/fortweb, sibling ../fortweb, then keri-notes libs/fortweb.
+if [[ -n "${FORTWEB_DIR:-}" ]]; then
+  if [[ ! -d "${FORTWEB_DIR}" ]]; then
+    echo "error: FORTWEB_DIR is not a directory: ${FORTWEB_DIR}" >&2
+    exit 1
+  fi
+  FORTWEB_DIR="$(cd "${FORTWEB_DIR}" && pwd)"
+elif [[ -d "${PAYLOAD_DIR}/.deps/fortweb" ]]; then
+  FORTWEB_DIR="$(cd "${PAYLOAD_DIR}/.deps/fortweb" && pwd)"
+elif [[ -d "${PAYLOAD_DIR}/../fortweb" ]]; then
+  FORTWEB_DIR="$(cd "${PAYLOAD_DIR}/../fortweb" && pwd)"
+elif [[ -d "${PAYLOAD_DIR}/../../libs/fortweb" ]]; then
+  FORTWEB_DIR="$(cd "${PAYLOAD_DIR}/../../libs/fortweb" && pwd)"
+else
+  echo "error: FortWeb checkout not found (need wheels/). Set FORTWEB_DIR, clone to .deps/fortweb, ../fortweb, or ../../libs/fortweb." >&2
+  exit 1
+fi
 
 OUT_DIR="${PAYLOAD_DIR}/public/pyodide"
 WHEELS_DIR="${OUT_DIR}/wheels"
@@ -82,7 +100,7 @@ if [[ -f "${BLAKE3_DEST}" ]] && [[ "${FORCE}" == "false" ]]; then
 else
   if [[ ! -f "${BLAKE3_SRC}" ]]; then
     error "blake3 wheel not found at ${BLAKE3_SRC}"
-    error "Ensure libs/fortweb is cloned (run git clone git@github.com:keri-foundation/fortweb.git libs/fortweb)"
+    error "Set FORTWEB_DIR to your FortWeb checkout, or clone next to this repo / under .deps/fortweb / at libs/fortweb in the parent monorepo."
     exit 1
   fi
   cp "${BLAKE3_SRC}" "${BLAKE3_DEST}"

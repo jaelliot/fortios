@@ -126,6 +126,8 @@ jobs:
         run: npm ci
 
       - name: Download Pyodide runtime
+        env:
+          FORTWEB_DIR: ${{ github.workspace }}/.deps/fortweb
         run: make pyodide
 
       - name: Stage bundled WebPayload for wrapper tests
