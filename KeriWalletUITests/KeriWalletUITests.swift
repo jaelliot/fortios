@@ -36,10 +36,11 @@ final class KeriWalletUITests: XCTestCase {
             return
         }
 
-        let profileLabel = webView.staticTexts["Profile ID"]
+        // WKWebView maps <label for="profile-id"> + text input to a TextField label, not a separate StaticText.
+        let profileField = webView.textFields["Profile ID"]
         XCTAssertTrue(
-            profileLabel.waitForExistence(timeout: 45),
-            "Bundled shell should expose the 'Profile ID' field label after Pyodide seam validation boots"
+            profileField.waitForExistence(timeout: 45),
+            "Bundled shell should expose the 'Profile ID' field after Pyodide seam validation boots"
         )
     }
 
