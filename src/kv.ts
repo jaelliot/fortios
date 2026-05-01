@@ -127,9 +127,24 @@ export async function openIdbKVFactory(
                 return withRetry((database) =>
                     new Promise((resolve, reject) => {
                         const tx = database.transaction(storeName, 'readwrite');
-                        const req = tx.objectStore(storeName).delete(storePrefix + key);
-                        req.onsuccess = () => resolve(true);
-                        req.onerror = () => reject(new Error(`IDB del failed: ${req.error?.message}`));
+                        const objectStore = tx.objectStore(storeName);
+                        const fullKey = storePrefix + key;
+                        const getReq = objectStore.get(fullKey);
+
+                        getReq.onsuccess = () => {
+                            if (getReq.result === undefined) {
+                                resolve(false);
+                                return;
+                            }
+
+                            const delReq = objectStore.delete(fullKey);
+                            delReq.onsuccess = () => resolve(true);
+                            delReq.onerror = () =>
+                                reject(new Error(`IDB del failed: ${delReq.error?.message}`));
+                        };
+
+                        getReq.onerror = () =>
+                            reject(new Error(`IDB del failed: ${getReq.error?.message}`));
                     }),
                 );
             },
