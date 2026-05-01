@@ -25,8 +25,10 @@ final class KeriWalletUITests: XCTestCase {
         )
     }
 
-    // MARK: - Vault Picker
+    // MARK: - Bundled WebPayload shell (seam validation)
 
+    /// The staged `WebPayload` entry is the legacy proof / seam-validation shell (see `WebPayload/index.html`),
+    /// not the older vault-picker marketing copy. Assert stable, accessible chrome from that document.
     func test_vault_picker_shows_your_vaults_heading() {
         let webView = app.webViews.firstMatch
         guard webView.waitForExistence(timeout: 30) else {
@@ -34,10 +36,10 @@ final class KeriWalletUITests: XCTestCase {
             return
         }
 
-        let heading = webView.staticTexts["Your Vaults"]
+        let profileLabel = webView.staticTexts["Profile ID"]
         XCTAssertTrue(
-            heading.waitForExistence(timeout: 15),
-            "Vault picker should display 'Your Vaults' heading"
+            profileLabel.waitForExistence(timeout: 45),
+            "Bundled shell should expose the 'Profile ID' field label after Pyodide seam validation boots"
         )
     }
 
@@ -48,10 +50,15 @@ final class KeriWalletUITests: XCTestCase {
             return
         }
 
-        let createButton = webView.buttons["Create Vault"]
+        let saveButton = webView.buttons["Save"]
+        let loadButton = webView.buttons["Load"]
         XCTAssertTrue(
-            createButton.waitForExistence(timeout: 15),
-            "Vault picker should display 'Create Vault' button"
+            saveButton.waitForExistence(timeout: 45),
+            "Bundled shell should expose the indexedDB seam 'Save' control"
+        )
+        XCTAssertTrue(
+            loadButton.waitForExistence(timeout: 5),
+            "Bundled shell should expose the indexedDB seam 'Load' control"
         )
     }
 
