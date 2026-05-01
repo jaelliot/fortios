@@ -84,12 +84,14 @@ echo "[build-payload] pyodide bundle ok ($(du -sh "${PAYLOAD_DIR}/dist/pyodide" 
 # Compatibility shims (pysodium, lmdb), the IndexedDB backend, and the hio
 # subset live in fortweb/app/runtime/ — the single source of truth for all Pyodide
 # Python files.  We cherry-pick only the files needed at runtime.
-FORTWEB_PYTHON_DIR="${SCRIPT_DIR}/../fortweb/app/runtime"
+# Default sibling checkout: ../fortweb. Override with FORTWEB_DIR (e.g. CI .deps/fortweb).
+_fortweb_root="${FORTWEB_DIR:-${SCRIPT_DIR}/../fortweb}"
+FORTWEB_PYTHON_DIR="${_fortweb_root}/app/runtime"
 PYTHON_FILES=(indexeddb_python.py pysodium.py lmdb.py)
 
 if [[ ! -d "${FORTWEB_PYTHON_DIR}" ]]; then
   echo "error: fortweb/app/runtime/ not found at ${FORTWEB_PYTHON_DIR}" 1>&2
-  echo "       Ensure libs/fortweb is checked out alongside Fort-ios" 1>&2
+  echo "       Set FORTWEB_DIR to your FortWeb checkout or place fortweb next to Fort-ios" 1>&2
   exit 1
 fi
 

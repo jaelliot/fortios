@@ -125,15 +125,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download Pyodide runtime
+        run: make pyodide
+
       - name: Stage bundled WebPayload for wrapper tests
+        env:
+          FORTWEB_DIR: ${{ github.workspace }}/.deps/fortweb
         run: |
           rm -rf WebPayload dist
-          PAYLOAD_SOURCE=fortweb \
-          FORTWEB_DIR="$GITHUB_WORKSPACE/.deps/fortweb" \
-          ./sync-payload.sh
+          # Match XCTest expectations: fort-ios Vite seam shell (not FortWeb SPA redirect).
+          PAYLOAD_SOURCE=fort-ios ./sync-payload.sh
           test -f WebPayload/index.html
           test -f WebPayload/build-manifest.json
-          test -f WebPayload/fortweb/app/index.html
+          test -f WebPayload/pyodide/pyodide.js
+          test -d WebPayload/assets
 
       - name: Run Swift unit and UI tests
         run: |
