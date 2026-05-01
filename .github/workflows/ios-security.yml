@@ -137,36 +137,10 @@ jobs:
 
       - name: Run Swift unit and UI tests
         run: |
-          # Portable simulator selection: avoid bash mapfile (not in POSIX sh; macOS /bin/sh is dash-like).
+          # Simulator selection lives in .github/scripts/ so YAML indentation is not fed to Python stdin.
           simulator_pick="$(mktemp)"
           trap 'rm -f "${simulator_pick}"' EXIT
-          python3 - <<'PY' > "${simulator_pick}"
-            import json
-            import subprocess
-
-            data = json.loads(
-                subprocess.check_output(
-                    ["xcrun", "simctl", "list", "devices", "available", "--json"],
-                    text=True,
-                )
-            )
-
-            for runtime in sorted(data.get("devices", {})):
-                if not runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-"):
-                    continue
-                for device in data["devices"][runtime]:
-                    if not device.get("isAvailable"):
-                        continue
-                    name = device.get("name", "")
-                    if not name.startswith("iPhone"):
-                        continue
-                    runtime_label = runtime.removeprefix("com.apple.CoreSimulator.SimRuntime.iOS-").replace("-", ".")
-                    print(device["udid"])
-                    print(f"{name} ({runtime_label})")
-                    raise SystemExit(0)
-
-            raise SystemExit("error: no available iPhone simulator found on runner")
-          PY
+          python3 "${GITHUB_WORKSPACE}/.github/scripts/select_ios_simulator.py" > "${simulator_pick}"
           py_status=$?
           if [ "${py_status}" -ne 0 ]; then
             echo "error: failed to resolve an available iPhone simulator" >&2
