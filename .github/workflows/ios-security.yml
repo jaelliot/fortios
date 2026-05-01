@@ -137,7 +137,10 @@ jobs:
 
       - name: Run Swift unit and UI tests
         run: |
-          mapfile -t simulator_info < <(python3 - <<'PY'
+          # Portable simulator selection: avoid bash mapfile (not in POSIX sh; macOS /bin/sh is dash-like).
+          simulator_pick="$(mktemp)"
+          trap 'rm -f "${simulator_pick}"' EXIT
+          python3 - <<'PY' > "${simulator_pick}"
             import json
             import subprocess
 
@@ -164,16 +167,23 @@ jobs:
 
             raise SystemExit("error: no available iPhone simulator found on runner")
           PY
-          )
+          py_status=$?
+          if [ "${py_status}" -ne 0 ]; then
+            echo "error: failed to resolve an available iPhone simulator" >&2
+            xcrun simctl list devices available
+            exit "${py_status}"
+          fi
 
-          if [[ "${#simulator_info[@]}" -lt 2 ]]; then
+          if ! { IFS= read -r simulator_udid && IFS= read -r simulator_label; } < "${simulator_pick}"; then
+            echo "error: failed to parse simulator selection output" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+          if [ -z "${simulator_udid}" ] || [ -z "${simulator_label}" ]; then
             echo "error: failed to resolve an available iPhone simulator" >&2
             xcrun simctl list devices available
             exit 1
           fi
-
-          simulator_udid="${simulator_info[0]}"
-          simulator_label="${simulator_info[1]}"
 
           echo "Using simulator: ${simulator_label} [${simulator_udid}]"
           rm -rf "${DERIVED_DATA_PATH}" "${TEST_RESULTS_PATH}"
