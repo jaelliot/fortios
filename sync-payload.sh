@@ -118,14 +118,80 @@ require_dir() {
   fi
 }
 
+fortweb_package_has_runtime_js_check() {
+  local package_json_path="$1"
+
+  if ! command -v node >/dev/null 2>&1; then
+    return 2
+  fi
+
+  node -e '
+const fs = require("fs");
+const packageJsonPath = process.argv[1];
+
+try {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  const scripts = packageJson && packageJson.scripts ? packageJson.scripts : {};
+  process.exit(Object.prototype.hasOwnProperty.call(scripts, "check:runtime-js") ? 0 : 1);
+} catch (err) {
+  console.error(`[sync-payload] failed to read ${packageJsonPath}: ${err.message}`);
+  process.exit(3);
+}
+' "${package_json_path}"
+}
+
 verify_fortweb_runtime_js() {
+  local package_json_path="${FORTWEB_SOURCE_DIR}/package.json"
+  local tsconfig_build_path="${FORTWEB_SOURCE_DIR}/tsconfig.build.json"
+  local has_package_json=0
+  local has_tsconfig_build=0
+  local checker_exit_code=0
+
   if [[ "${FETCH_MODE}" -eq 1 ]]; then
-    echo "[sync-payload] skipping runtime JS freshness check for fetched FortWeb ref=${FORTWEB_REF}"
+    echo "[sync-payload] fetched FortWeb refs skip local runtime-JS freshness checking (ref=${FORTWEB_REF})"
     return
   fi
 
-  require_file "${FORTWEB_SOURCE_DIR}/package.json" "FortWeb package.json"
-  require_file "${FORTWEB_SOURCE_DIR}/tools/check-runtime-js.mjs" "FortWeb runtime JS checker"
+  if [[ -f "${package_json_path}" ]]; then
+    has_package_json=1
+  fi
+
+  if [[ -f "${tsconfig_build_path}" ]]; then
+    has_tsconfig_build=1
+  fi
+
+  if [[ "${has_package_json}" -eq 0 && "${has_tsconfig_build}" -eq 0 ]]; then
+    echo "[sync-payload] FortWeb runtime-JS freshness check skipped: checkout does not expose TS runtime build tooling."
+    return
+  fi
+
+  if [[ "${has_package_json}" -eq 0 || "${has_tsconfig_build}" -eq 0 ]]; then
+    echo "error: FortWeb checkout appears partially migrated to TS runtime sources but does not expose a complete local runtime build toolchain." 1>&2
+    echo "       Expected both package.json and tsconfig.build.json before local payload sync." 1>&2
+    echo "       Update FortWeb or use a compatible ref before local payload sync." 1>&2
+    exit 1
+  fi
+
+  if fortweb_package_has_runtime_js_check "${package_json_path}"; then
+    :
+  else
+    checker_exit_code=$?
+    case "${checker_exit_code}" in
+      1)
+        echo "error: FortWeb checkout appears to use TS runtime sources but does not provide npm run check:runtime-js. Update FortWeb or use a compatible ref before local payload sync." 1>&2
+        exit 1
+        ;;
+      2)
+        echo "error: node is required to inspect FortWeb package.json for runtime JS freshness checking" 1>&2
+        echo "       Install Node.js or stage from a fetched immutable ref with FORTWEB_FETCH=1." 1>&2
+        exit 1
+        ;;
+      *)
+        echo "error: failed to inspect FortWeb package.json for runtime JS freshness checking" 1>&2
+        exit 1
+        ;;
+    esac
+  fi
 
   if ! command -v npm >/dev/null 2>&1; then
     echo "error: npm is required to verify FortWeb runtime JavaScript freshness before staging a local checkout" 1>&2
