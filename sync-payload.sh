@@ -118,6 +118,28 @@ require_dir() {
   fi
 }
 
+verify_fortweb_runtime_js() {
+  if [[ "${FETCH_MODE}" -eq 1 ]]; then
+    echo "[sync-payload] skipping runtime JS freshness check for fetched FortWeb ref=${FORTWEB_REF}"
+    return
+  fi
+
+  require_file "${FORTWEB_SOURCE_DIR}/package.json" "FortWeb package.json"
+  require_file "${FORTWEB_SOURCE_DIR}/tools/check-runtime-js.mjs" "FortWeb runtime JS checker"
+
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "error: npm is required to verify FortWeb runtime JavaScript freshness before staging a local checkout" 1>&2
+    echo "       Install npm or stage from a fetched immutable ref with FORTWEB_FETCH=1." 1>&2
+    exit 1
+  fi
+
+  echo "[sync-payload] verifying FortWeb runtime JavaScript freshness"
+  (
+    cd "${FORTWEB_SOURCE_DIR}"
+    npm run check:runtime-js
+  )
+}
+
 resolve_fortweb_source() {
   if [[ "${FETCH_MODE}" -eq 1 ]]; then
     if ! command -v git >/dev/null 2>&1; then
@@ -183,6 +205,7 @@ write_fortweb_manifest() {
 
 sync_fortweb_payload() {
   resolve_fortweb_source
+  verify_fortweb_runtime_js
 
   require_file "${FORTWEB_SOURCE_DIR}/app/index.html" "FortWeb app/index.html"
   require_file "${FORTWEB_SOURCE_DIR}/pyscript-ci.toml" "FortWeb pyscript-ci.toml"
