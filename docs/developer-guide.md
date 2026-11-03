@@ -228,6 +228,43 @@ The existing app's normal persistent vault remains separate from the test store;
 confirm its vault and identifier after updating the development app. The test
 does not delete its host app or require changing certificates or account settings.
 
+#### Synthetic credential recovery across an app restart
+
+`testSyntheticNativePersistenceAcrossAppRestart` uses the same candidate and
+protocol operations in a persistent, identifier-specific WKWebView data store.
+It is isolated from the app's default WebKit store and requires iOS 17 or later.
+The test uses synthetic vaults and a synthetic Grant; it stores the Grant stream
+and comparison metadata in a test-only app-preferences checkpoint. The actual
+credential and registry evidence are reopened from the protected test vaults.
+No real credential or passcode should be used with this test.
+
+Use the same preflight and development bundle settings above, replacing the test
+selection and adding Xcode's process-relaunch options:
+
+```sh
+-only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePersistenceAcrossAppRestart
+-test-iterations 2 -test-repetition-relaunch-enabled YES
+```
+
+Use a new result path and keep the app installed throughout both iterations.
+The result is valid only when both iterations pass without skips and the test
+output shows `Runtime persistence phase: write` followed by `read` with different
+process IDs. Two write phases or an incomplete run do not prove recovery. If an
+interrupted run leaves a pending checkpoint, the next iteration reads that state;
+start another two-iteration run and confirm the write/read order. Synthetic test
+vaults and checkpoints are not automatically removed.
+
+On recovery the test compares the original identifiers, issuer and presentation
+registry heads, credential and Grant IDs, retrieves the previously stored Grant,
+and re-verifies it using recovered issuer and holder evidence. It also rejects a
+changed Grant binding. The Grant stream used for re-verification comes from the
+test checkpoint, because the current exchange lookup returns a verified view, not
+an exportable original stream. This test does not demonstrate offline recovery,
+network delivery, current revocation status, or the user-facing Credentials workflow.
+The candidate's `fort.runtime-requirements.v2` descriptor is also rejected by
+this baseline's v1-only requirements compatibility validator; passing this
+device test does not resolve that separate packaging compatibility failure.
+
 ### Node tooling tests
 
 `make test-tools` runs the payload import, validation, and bridge tooling tests

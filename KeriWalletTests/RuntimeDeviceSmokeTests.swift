@@ -49,9 +49,28 @@ private final class RuntimeSmokeNavigation: NSObject, WKNavigationDelegate {
 @MainActor
 final class RuntimeDeviceSmokeTests: XCTestCase {
     func testSyntheticNativePresentation() async throws {
+        try await exercise(persistent: false)
+    }
+
+    func testSyntheticNativePersistenceAcrossAppRestart() async throws {
+        try await exercise(persistent: true)
+    }
+
+    private func exercise(persistent: Bool) async throws {
         try verifyInstalledPayload()
+        let checkpointKey = "org.kerifoundation.runtime-persistence-test-v1"
+        let checkpoint = persistent ? UserDefaults.standard.dictionary(forKey: checkpointKey) : nil
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        if persistent {
+            guard #available(iOS 17.0, *) else {
+                throw XCTSkip("An isolated persistent WebKit store requires iOS 17")
+            }
+            let identifier = try XCTUnwrap(UUID(uuidString: "AD137EF7-36C9-4DBF-8D04-FB47547C2AE6"))
+            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: identifier)
+            XCTAssertTrue(configuration.websiteDataStore.isPersistent)
+        } else {
+            configuration.websiteDataStore = .nonPersistent()
+        }
         let schemeHandler = RuntimeSmokeSchemeHandler()
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "app")
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -62,34 +81,20 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         webView.load(URLRequest(url: url))
         await fulfillment(of: [loaded], timeout: 30)
 
-        // Same public fixture used by the producer's registry receipt tests.
-        let schema = #"""
-        {"$id":"EPrsJF2BXyDUgDCVbGURsGNwCZjyrxD5M2qnBmhvoZYQ","$schema":"https://json-schema.org/draft/2020-12/schema",
-        "title":"ACM Default Schema","description":"Default JSON Schema for acm ACDC.",
-        "credentialType":"ACDC_acm_message","version":"2.0.0","type":"object","required":["v","d","i","s"],
-        "properties":{"v":{"description":"ACDC version string","type":"string"},
-        "t":{"description":"Message type","type":"string"},"d":{"description":"Message SAID","type":"string"},
-        "u":{"description":"Message UUID","type":"string"},"i":{"description":"Issuer AID","type":"string"},
-        "rd":{"description":"Registry SAID","type":"string"},"s":{"description":"Schema Section","oneOf":[
-        {"description":"Schema Section SAID","type":"string"},
-        {"description":"Uncompacted Schema Section","type":"object"}]},
-        "a":{"description":"Attribute Section","oneOf":[{"description":"Attribute Section SAID","type":"string"},
-        {"description":"Uncompacted Attribute Section","type":"object"}]},
-        "A":{"description":"Aggregate Section","oneOf":[{"description":"Aggregate Section AGID","type":"string"},
-        {"description":"Uncompacted Aggregate Section","type":"array"}]},
-        "e":{"description":"Edge Section","oneOf":[{"description":"Edge Section SAID","type":"string"},
-        {"description":"Uncompacted Edge Section","type":"object"}]},"r":{"description":"Rule Section","oneOf":[
-        {"description":"Rule Section SAID","type":"string"},
-        {"description":"Uncompacted Rule Section","type":"object"}]}},
-        "additionalProperties":false}
-        """#
-
         let result = try await webView.callAsyncJavaScript(
-            Self.exerciseRuntime, arguments: ["schema": schema], in: nil, contentWorld: .page
+            Self.exerciseRuntime, arguments: ["schema": Self.schema, "persistent": persistent,
+                                               "processId": ProcessInfo.processInfo.processIdentifier,
+                                               "checkpoint": checkpoint ?? [:]],
+            in: nil, contentWorld: .page
         )
         let outcome = try XCTUnwrap(result as? [String: Any])
         let diagnostic = "Runtime test stopped at \(outcome["stage"] ?? "unknown") (\(outcome["code"] ?? "unknown"))"
         XCTAssertEqual(outcome["ok"] as? Bool, true, diagnostic)
+        if persistent {
+            try recordPersistence(outcome, previous: checkpoint, key: checkpointKey)
+            withExtendedLifetime((schemeHandler, navigation)) {}
+            return
+        }
         XCTAssertEqual(outcome["negativeRejected"] as? Bool, true)
         XCTAssertEqual(outcome["bindingRejected"] as? Bool, true)
         XCTAssertEqual(outcome["tamperRecovered"] as? Bool, true)
@@ -97,6 +102,20 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         XCTAssertEqual(outcome["contentionRejected"] as? Bool, true)
         XCTAssertEqual(outcome["restartRecovered"] as? Bool, true)
         withExtendedLifetime((schemeHandler, navigation)) {}
+    }
+
+    private func recordPersistence(_ outcome: [String: Any], previous: [String: Any]?, key: String) throws {
+        let phase = try XCTUnwrap(outcome["phase"] as? String)
+        XCTAssertTrue(["write", "read"].contains(phase))
+        if phase == "write" {
+            UserDefaults.standard.set(try XCTUnwrap(outcome["checkpoint"] as? [String: Any]), forKey: key)
+        } else {
+            var saved = try XCTUnwrap(previous)
+            saved["complete"] = true
+            UserDefaults.standard.set(saved, forKey: key)
+        }
+        UserDefaults.standard.synchronize()
+        print("Runtime persistence phase: \(phase), process: \(ProcessInfo.processInfo.processIdentifier)")
     }
 
     private func verifyInstalledPayload() throws {
@@ -118,6 +137,31 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
             XCTAssertEqual(actual, expected, "Installed runtime file differs: \(path)")
         }
     }
+
+}
+
+private extension RuntimeDeviceSmokeTests {
+    // Same public fixture used by the producer's registry receipt tests.
+    private static let schema = #"""
+    {"$id":"EPrsJF2BXyDUgDCVbGURsGNwCZjyrxD5M2qnBmhvoZYQ","$schema":"https://json-schema.org/draft/2020-12/schema",
+    "title":"ACM Default Schema","description":"Default JSON Schema for acm ACDC.",
+    "credentialType":"ACDC_acm_message","version":"2.0.0","type":"object","required":["v","d","i","s"],
+    "properties":{"v":{"description":"ACDC version string","type":"string"},
+    "t":{"description":"Message type","type":"string"},"d":{"description":"Message SAID","type":"string"},
+    "u":{"description":"Message UUID","type":"string"},"i":{"description":"Issuer AID","type":"string"},
+    "rd":{"description":"Registry SAID","type":"string"},"s":{"description":"Schema Section","oneOf":[
+    {"description":"Schema Section SAID","type":"string"},
+    {"description":"Uncompacted Schema Section","type":"object"}]},
+    "a":{"description":"Attribute Section","oneOf":[{"description":"Attribute Section SAID","type":"string"},
+    {"description":"Uncompacted Attribute Section","type":"object"}]},
+    "A":{"description":"Aggregate Section","oneOf":[{"description":"Aggregate Section AGID","type":"string"},
+    {"description":"Uncompacted Aggregate Section","type":"array"}]},
+    "e":{"description":"Edge Section","oneOf":[{"description":"Edge Section SAID","type":"string"},
+    {"description":"Uncompacted Edge Section","type":"object"}]},"r":{"description":"Rule Section","oneOf":[
+    {"description":"Rule Section SAID","type":"string"},
+    {"description":"Uncompacted Rule Section","type":"object"}]}},
+    "additionalProperties":false}
+    """#
 
     private static let exerciseRuntime = #"""
     let stage = "initialization";
@@ -151,9 +195,63 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         const schemaId = JSON.parse(schema).$id;
         const require = (condition) => { if (!condition) throw new Error("assertion failed"); };
 
+        if (persistent && checkpoint.processId && !checkpoint.complete) {
+            stage = "restart-process";
+            require(checkpoint.processId !== processId);
+            stage = "restart-issuer";
+            await request("vaults.open", {vaultId: checkpoint.sourceId, passcode: "synthetic-issuer-passcode"});
+            const issued = (await request("credentials.getIssued", {vaultId: checkpoint.sourceId,
+                name: "registry", requestId: "credential"})).credential;
+            const issuer = await request("identifiers.export", {vaultId: checkpoint.sourceId,
+                aid: checkpoint.issuerAid});
+            require(issued.said === checkpoint.credentialSaid && issued.registryId === checkpoint.registryId &&
+                issued.sequence === checkpoint.sequence && issued.head === checkpoint.registryHead &&
+                issuer.cesr === checkpoint.issuerKel);
+            await request("vaults.close", {vaultId: checkpoint.sourceId});
+            stage = "restart-holder";
+            await request("vaults.open", {vaultId: checkpoint.holderId, passcode: "synthetic-holder-passcode"});
+            const received = await request("credentials.getReceived", {vaultId: checkpoint.holderId,
+                syntheticOnly: true, said: checkpoint.credentialSaid});
+            const holder = await request("identifiers.export", {vaultId: checkpoint.holderId,
+                aid: checkpoint.holderAid});
+            const bound = (await request("registries.present", {vaultId: checkpoint.holderId,
+                name: "presentations", grantSaid: checkpoint.grantSaid})).presentation;
+            require(received.credential.issuance === "verified" &&
+                received.credential.said === checkpoint.credentialSaid && holder.cesr === checkpoint.holderKel &&
+                bound.registryId === checkpoint.presentationRegistryId && bound.head === checkpoint.presentationHead &&
+                bound.sequence === checkpoint.presentationSequence && bound.event === checkpoint.presentationEvent);
+            await request("vaults.close", {vaultId: checkpoint.holderId});
+            stage = "restart-verifier";
+            await request("vaults.open", {vaultId: checkpoint.verifierId, passcode: "synthetic-verifier-passcode"});
+            const stored = await request("ipex.get", {vaultId: checkpoint.verifierId,
+                syntheticOnly: true, said: checkpoint.grantSaid});
+            require(stored.exchange.said === checkpoint.grantSaid &&
+                stored.exchange.senderAid === checkpoint.holderAid &&
+                stored.exchange.recipientAid === checkpoint.verifierAid);
+            const verification = {vaultId: checkpoint.verifierId, syntheticOnly: true, cesr: checkpoint.grantCesr,
+                evidence: received.evidence, presenterAid: checkpoint.holderAid, verifierAid: checkpoint.verifierAid,
+                presentation: bound};
+            const verified = await request("ipex.verifyPresentation", verification);
+            require(verified.exchange.said === checkpoint.grantSaid &&
+                verified.credential.said === checkpoint.credentialSaid && verified.credential.issuance === "verified");
+            stage = "restart-corruption";
+            let rejected = false;
+            try {
+                await request("ipex.verifyPresentation", {...verification,
+                    presentation: {...bound, grantSaid: checkpoint.credentialSaid}});
+            } catch (error) {
+                rejected = error?.code === "VALIDATION";
+            }
+            require(rejected);
+            await request("vaults.close", {vaultId: checkpoint.verifierId});
+            return {ok: true, phase: "read"};
+        }
+
+        const suffix = persistent ? `-${Date.now()}-${processId}` : "";
+
         stage = "issuer";
         const sourceId = (await request("vaults.create", {
-            name: "smoke-issuer", passcode: "synthetic-issuer-passcode"})).vault.id;
+            name: "smoke-issuer" + suffix, passcode: "synthetic-issuer-passcode"})).vault.id;
         await request("vaults.open", {vaultId: sourceId, passcode: "synthetic-issuer-passcode"});
         const issuerAid = (await request("identifiers.create", {vaultId: sourceId, alias: "issuer"})).identifier.aid;
         const issuer = await request("identifiers.export", {vaultId: sourceId, aid: issuerAid});
@@ -175,7 +273,7 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
 
         stage = "holder";
         const holderId = (await request("vaults.create", {
-            name: "smoke-holder", passcode: "synthetic-holder-passcode"})).vault.id;
+            name: "smoke-holder" + suffix, passcode: "synthetic-holder-passcode"})).vault.id;
         await request("vaults.open", {vaultId: holderId, passcode: "synthetic-holder-passcode"});
         const holderAid = (await request("identifiers.create", {vaultId: holderId, alias: "holder"})).identifier.aid;
         const holder = await request("identifiers.export", {vaultId: holderId, aid: holderAid});
@@ -212,7 +310,7 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
 
         stage = "verifier";
         const verifierId = (await request("vaults.create", {
-            name: "smoke-verifier", passcode: "synthetic-verifier-passcode"})).vault.id;
+            name: "smoke-verifier" + suffix, passcode: "synthetic-verifier-passcode"})).vault.id;
         await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
         const verifierAid = (await request("identifiers.create", {
             vaultId: verifierId, alias: "verifier"})).identifier.aid;
@@ -299,6 +397,25 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         const restartRecovered = afterRestart.exchange.said === presentation.exchange.said;
         require(restartRecovered);
         await request("vaults.close", {vaultId: verifierId});
+        if (persistent) {
+            stage = "persist-checkpoint";
+            await request("vaults.open", {vaultId: sourceId, passcode: "synthetic-issuer-passcode"});
+            const issuerAfter = await request("identifiers.export", {vaultId: sourceId, aid: issuerAid});
+            await request("vaults.close", {vaultId: sourceId});
+            await request("vaults.open", {vaultId: holderId, passcode: "synthetic-holder-passcode"});
+            const holderAfter = await request("identifiers.export", {vaultId: holderId, aid: holderAid});
+            await request("vaults.close", {vaultId: holderId});
+            const saved = {processId, sourceId, holderId, verifierId,
+                issuerAid, holderAid, verifierAid, credentialSaid: credential.said, registryId: registry.registryId,
+                sequence: restored.sequence, registryHead: restored.head, issuerKel: issuerAfter.cesr,
+                holderKel: holderAfter.cesr, grantSaid: presentation.exchange.said,
+                grantCesr: presentation.exchange.cesr,
+                presentationRegistryId: presentation.presentation.registryId,
+                presentationHead: presentation.presentation.head,
+                presentationSequence: presentation.presentation.sequence,
+                presentationEvent: presentation.presentation.event};
+            return {ok: true, phase: "write", checkpoint: saved};
+        }
         return {ok: true, negativeRejected, bindingRejected, tamperRecovered, recovered,
             contentionRejected, restartRecovered};
     } catch (error) {
