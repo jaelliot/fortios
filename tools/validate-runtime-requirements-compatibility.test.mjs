@@ -4,14 +4,34 @@ import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = path.resolve(__dirname, '..');
 const VALIDATOR = path.join(PROJECT_DIR, 'tools/validate-runtime-requirements-compatibility.mjs');
 const CANONICAL_CONFIG = path.join(PROJECT_DIR, 'runtime-platform-config.json');
-const PAYLOAD_DIR = path.join(PROJECT_DIR, 'WebPayload');
+const PAYLOAD_SOURCE = path.join(PROJECT_DIR, 'WebPayload');
+const V1_FIXTURE = path.join(PROJECT_DIR, 'tools/fixtures/runtime-requirements-v1.json');
+const V2_FIXTURE = path.join(PROJECT_DIR, 'tools/fixtures/runtime-requirements-v2.json');
+let PAYLOAD_DIR;
+
+before(async () => {
+    PAYLOAD_DIR = await mkdtemp(path.join(tmpdir(), 'rrc-fixture-'));
+    await cp(PAYLOAD_SOURCE, PAYLOAD_DIR, { recursive: true });
+    const requirements = await readFile(V2_FIXTURE);
+    await writeFile(path.join(PAYLOAD_DIR, 'contracts/runtime-requirements.json'), requirements);
+    const manifestPath = path.join(PAYLOAD_DIR, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const entry = manifest.files.find((file) => file.path === 'contracts/runtime-requirements.json');
+    entry.bytes = requirements.length;
+    entry.sha256 = createHash('sha256').update(requirements).digest('hex');
+    await writeFile(manifestPath, JSON.stringify(manifest));
+});
+
+after(async () => {
+    if (PAYLOAD_DIR) await rm(PAYLOAD_DIR, { recursive: true, force: true });
+});
 
 function runValidator(args = []) {
     try {
@@ -67,9 +87,27 @@ async function withMutatedPayload(mutations) {
 
 // --- Positive ---
 
-test('checked-in config is compatible with imported requirements', () => {
+test('checked-in config remains compatible with the v1 contract', async () => {
+    const fixture = JSON.parse(await readFile(V1_FIXTURE, 'utf8'));
+    const dir = await withMutatedPayload({
+        requirements(rr) {
+            for (const key of Object.keys(rr)) delete rr[key];
+            Object.assign(rr, fixture);
+        },
+    });
+    try {
+        const result = runValidator(['--payload', dir, '--config', CANONICAL_CONFIG]);
+        assert.ok(result.passed, `Expected v1 compatibility: ${result.stderr}`);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('valid v2 contract is rejected when the host has no verified HTTPS service policy', () => {
     const result = runValidator(['--payload', PAYLOAD_DIR, '--config', CANONICAL_CONFIG]);
-    assert.ok(result.passed, `Expected compatibility: ${result.stderr}`);
+    assert.equal(result.passed, false);
+    assert.match(result.stderr, /wallet_service_https.*not verified/);
+    assert.match(result.stderr, /does not declare support.*v2/);
 });
 
 test('compatibility evaluation is deterministic', () => {
@@ -140,6 +178,17 @@ test('unsupported requirements schema is rejected', async () => {
     });
 });
 
+test('schema and version must agree', async () => {
+    const dir = await withMutatedPayload({ requirements(rr) { rr.version = 1; } });
+    try {
+        const result = runValidator(['--payload', dir, '--config', CANONICAL_CONFIG]);
+        assert.equal(result.passed, false);
+        assert.match(result.stderr, /Unsupported requirements version/);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
 test('unknown required capability is rejected', async () => {
     await withTempDir(async (dir) => {
         const { mkdir } = await import('node:fs/promises');
@@ -206,6 +255,18 @@ test('digest mismatch is rejected', async () => {
     }
 });
 
+test('missing requirements file is rejected', async () => {
+    const dir = await withMutatedPayload({});
+    try {
+        await rm(path.join(dir, 'contracts/runtime-requirements.json'));
+        const result = runValidator(['--payload', dir, '--config', CANONICAL_CONFIG]);
+        assert.equal(result.passed, false);
+        assert.match(result.stderr, /Cannot read requirements artifact/);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
 test('invalid UTF-8 is rejected', async () => {
     const dir = await withMutatedPayload({
         manifest(m) {
@@ -267,6 +328,19 @@ test('missing required capability in producer is rejected', async () => {
     }
 });
 
+test('missing requirements collections are rejected', async () => {
+    for (const field of ['capabilities', 'forbidden_behaviors']) {
+        const dir = await withMutatedPayload({ requirements(rr) { delete rr[field]; } });
+        try {
+            const result = runValidator(['--payload', dir, '--config', CANONICAL_CONFIG]);
+            assert.equal(result.passed, false);
+            assert.match(result.stderr, new RegExp(`Requirements ${field} must be`));
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    }
+});
+
 test('unknown forbidden behavior is rejected', async () => {
     const dir = await withMutatedPayload({
         requirements(rr) { rr.forbidden_behaviors.push('unknown_behavior'); },
@@ -282,7 +356,7 @@ test('unknown forbidden behavior is rejected', async () => {
 
 test('missing forbidden behavior is rejected', async () => {
     const dir = await withMutatedPayload({
-        requirements(rr) { rr.forbidden_behaviors = rr.forbidden_behaviors.filter((f) => f !== 'network_fetch'); },
+        requirements(rr) { rr.forbidden_behaviors = rr.forbidden_behaviors.filter((f) => f !== 'remote_runtime_acquisition'); },
     });
     try {
         const result = runValidator(['--payload', dir, '--config', CANONICAL_CONFIG]);
@@ -302,7 +376,35 @@ test('platform mechanism conflict is rejected', async () => {
         const result = runValidator(['--payload', PAYLOAD_DIR, '--config', badConfig]);
         assert.ok(!result.passed);
         assert.match(result.stderr, /compatibility failure/);
+        assert.match(result.stderr, /no verified policy separates bundled runtime code from service data/);
     } finally {
         await rm(badConfig, { force: true });
     }
+});
+
+test('declaring v2 support cannot bypass missing service and runtime isolation', async () => {
+    await withTempDir(async (dir) => {
+        const cfg = JSON.parse(await readFile(CANONICAL_CONFIG, 'utf8'));
+        cfg.requirements_compatibility.supported_schemas.push('fort.runtime-requirements.v2');
+        cfg.network.policy = 'allow-some';
+        const config = path.join(dir, 'config.json');
+        await writeFile(config, JSON.stringify(cfg));
+        const result = runValidator(['--payload', PAYLOAD_DIR, '--config', config]);
+        assert.equal(result.passed, false);
+        assert.match(result.stderr, /wallet_service_https.*not verified/);
+        assert.match(result.stderr, /no verified policy separates bundled runtime code from service data/);
+        assert.match(result.stderr, /no verified policy rejects cleartext wallet-service traffic/);
+    });
+});
+
+test('platform must declare the required payload profile', async () => {
+    await withTempDir(async (dir) => {
+        const cfg = JSON.parse(await readFile(CANONICAL_CONFIG, 'utf8'));
+        cfg.requirements_compatibility.supported_profiles = [];
+        const config = path.join(dir, 'config.json');
+        await writeFile(config, JSON.stringify(cfg));
+        const result = runValidator(['--payload', PAYLOAD_DIR, '--config', config]);
+        assert.equal(result.passed, false);
+        assert.match(result.stderr, /does not declare support for profile 'offline-runtime'/);
+    });
 });

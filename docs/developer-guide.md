@@ -261,9 +261,10 @@ changed Grant binding. The Grant stream used for re-verification comes from the
 test checkpoint, because the current exchange lookup returns a verified view, not
 an exportable original stream. This test does not demonstrate offline recovery,
 network delivery, current revocation status, or the user-facing Credentials workflow.
-The candidate's `fort.runtime-requirements.v2` descriptor is also rejected by
-this baseline's v1-only requirements compatibility validator; passing this
-device test does not resolve that separate packaging compatibility failure.
+The candidate's `fort.runtime-requirements.v2` descriptor is rejected by the
+compatibility validator because this host configuration does not establish
+HTTPS wallet-service support and does not declare v2 compatibility. Passing
+this device test does not resolve that separate compatibility failure.
 
 ### Node tooling tests
 

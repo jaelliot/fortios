@@ -31,8 +31,8 @@ const DEFAULT_CONFIG = path.join(PROJECT_DIR, 'runtime-platform-config.json');
 
 const REQUIRED_PRODUCER = 'fortweb';
 const REQUIRED_PROFILE = 'offline-runtime';
-const SUPPORTED_REQUIREMENTS_SCHEMA = 'fort.runtime-requirements.v1';
-const SUPPORTED_REQUIREMENTS_VERSION = 1;
+const REQUIREMENTS_V1 = 'fort.runtime-requirements.v1';
+const REQUIREMENTS_V2 = 'fort.runtime-requirements.v2';
 const CONVENTIONAL_PATH = 'contracts/runtime-requirements.json';
 
 const REQUIRED_CAPABILITIES = [
@@ -53,6 +53,20 @@ const REQUIRED_FORBIDDEN_BEHAVIORS = [
     'service_worker_registration',
     'general_purpose_browsing',
     'localhost_or_loopback_origin',
+    'http_fallback',
+];
+
+const V2_CAPABILITIES = [
+    ...REQUIRED_CAPABILITIES.filter((capability) => capability !== 'remote_network_prohibition'),
+    'remote_runtime_acquisition_prohibition',
+    'wallet_service_https',
+];
+
+const V2_FORBIDDEN_BEHAVIORS = [
+    'remote_runtime_acquisition',
+    'cleartext_wallet_service_traffic',
+    'service_worker_registration',
+    'general_purpose_browsing',
     'http_fallback',
 ];
 
@@ -92,6 +106,16 @@ const CAPABILITY_PREDICATES = {
             return { compatible: false, reason: `network policy must be 'deny-all', got '${cfg.network?.policy}'` };
         }
         return { compatible: true };
+    },
+    remote_runtime_acquisition_prohibition(cfg) {
+        if (cfg.network?.policy !== 'deny-all') {
+            return { compatible: false, reason: 'no verified policy separates bundled runtime code from service data' };
+        }
+        return { compatible: true };
+    },
+    wallet_service_https() {
+        // The current host contract cannot attest HTTPS data access separately from runtime code.
+        return { compatible: false, reason: 'HTTPS wallet-service access is not verified by this iOS configuration' };
     },
     bundled_assets_only(cfg) {
         if (cfg.assets?.source !== 'application-bundle') {
@@ -135,6 +159,15 @@ const FORBIDDEN_PREDICATES = {
     network_fetch(cfg) {
         if (cfg.network?.policy !== 'deny-all') {
             return { compatible: false, reason: `network_fetch requires network policy 'deny-all', got '${cfg.network?.policy}'` };
+        }
+        return { compatible: true };
+    },
+    remote_runtime_acquisition(cfg) {
+        return CAPABILITY_PREDICATES.remote_runtime_acquisition_prohibition(cfg);
+    },
+    cleartext_wallet_service_traffic(cfg) {
+        if (cfg.network?.policy !== 'deny-all') {
+            return { compatible: false, reason: 'no verified policy rejects cleartext wallet-service traffic' };
         }
         return { compatible: true };
     },
@@ -285,10 +318,11 @@ async function main() {
     }
 
     // --- Schema and identity ---
-    if (rrData.schema !== SUPPORTED_REQUIREMENTS_SCHEMA) {
+    if (![REQUIREMENTS_V1, REQUIREMENTS_V2].includes(rrData.schema)) {
         fail(`Unsupported requirements schema '${rrData.schema}'.`);
     }
-    if (rrData.version !== SUPPORTED_REQUIREMENTS_VERSION) {
+    const expectedVersion = rrData.schema === REQUIREMENTS_V1 ? 1 : 2;
+    if (rrData.version !== expectedVersion) {
         fail(`Unsupported requirements version ${rrData.version}.`);
     }
     if (rrData.producer !== REQUIRED_PRODUCER) {
@@ -299,17 +333,31 @@ async function main() {
     }
 
     // --- Capability evaluation ---
-    const producerCaps = rrData.capabilities || {};
+    if (!rrData.capabilities || typeof rrData.capabilities !== 'object' || Array.isArray(rrData.capabilities)) {
+        fail('Requirements capabilities must be an object.');
+    }
+    if (!Array.isArray(rrData.forbidden_behaviors)) {
+        fail('Requirements forbidden_behaviors must be an array.');
+    }
+    const producerCaps = rrData.capabilities;
     const failures = [];
+    const requiredCapabilities = rrData.schema === REQUIREMENTS_V1 ? REQUIRED_CAPABILITIES : V2_CAPABILITIES;
+    const requiredForbidden = rrData.schema === REQUIREMENTS_V1 ? REQUIRED_FORBIDDEN_BEHAVIORS : V2_FORBIDDEN_BEHAVIORS;
+    if (!platformConfig.requirements_compatibility?.supported_schemas?.includes(rrData.schema)) {
+        failures.push(`Platform configuration does not declare support for '${rrData.schema}'.`);
+    }
+    if (!platformConfig.requirements_compatibility?.supported_profiles?.includes(rrData.payload_profile)) {
+        failures.push(`Platform configuration does not declare support for profile '${rrData.payload_profile}'.`);
+    }
 
-    for (const capId of REQUIRED_CAPABILITIES) {
+    for (const capId of requiredCapabilities) {
         const producerCap = producerCaps[capId];
         if (!producerCap) {
             failures.push(`Missing required capability: ${capId}`);
             continue;
         }
         if (producerCap.required !== true) {
-            // All v1 capabilities are required; non-required is unsupported
+            // All capabilities in the supported contracts are required.
             failures.push(`Capability '${capId}' is not marked required in producer.`);
             continue;
         }
@@ -328,14 +376,14 @@ async function main() {
 
     // Detect unknown capabilities in producer
     for (const capId of Object.keys(producerCaps)) {
-        if (!REQUIRED_CAPABILITIES.includes(capId)) {
+        if (!requiredCapabilities.includes(capId)) {
             failures.push(`Unknown required capability: ${capId}`);
         }
     }
 
     // --- Forbidden-behavior evaluation ---
-    const producerFB = rrData.forbidden_behaviors || [];
-    for (const fbId of REQUIRED_FORBIDDEN_BEHAVIORS) {
+    const producerFB = rrData.forbidden_behaviors;
+    for (const fbId of requiredForbidden) {
         if (!producerFB.includes(fbId)) {
             failures.push(`Missing forbidden behavior in producer: ${fbId}`);
             continue;
@@ -354,7 +402,7 @@ async function main() {
     }
 
     for (const fbId of producerFB) {
-        if (!REQUIRED_FORBIDDEN_BEHAVIORS.includes(fbId)) {
+        if (!requiredForbidden.includes(fbId)) {
             failures.push(`Unknown forbidden behavior: ${fbId}`);
         }
     }
@@ -367,7 +415,7 @@ async function main() {
         fail(`${failures.length} compatibility failure(s).`);
     }
 
-    process.stdout.write(`[validate-runtime-requirements-compatibility] Compatible: 10 capabilities, 5 forbidden behaviors verified.\n`);
+    process.stdout.write(`[validate-runtime-requirements-compatibility] Compatible: ${requiredCapabilities.length} capabilities, ${requiredForbidden.length} forbidden behaviors verified.\n`);
 }
 
 await main();
