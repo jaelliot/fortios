@@ -259,8 +259,56 @@ registry heads, credential and Grant IDs, retrieves the previously stored Grant,
 and re-verifies it using recovered issuer and holder evidence. It also rejects a
 changed Grant binding. The Grant stream used for re-verification comes from the
 test checkpoint, because the current exchange lookup returns a verified view, not
-an exportable original stream. This test does not demonstrate offline recovery,
-network delivery, current revocation status, or the user-facing Credentials workflow.
+an exportable original stream. It does not demonstrate network delivery, current
+revocation status, or the user-facing Credentials workflow.
+
+For an offline cold-launch recovery without reinstalling, start with a trusted,
+already installed `.dev` build containing `KeriWalletTests.xctest` and the
+generated device `.xctestrun` file for that same build. Set `XCTESTRUN` to the
+generated file and `NO_INSTALL_XCTESTRUN` to a new local file. The following
+retains the generated testing environment but tells Xcode to use the installed
+test bundle. It refuses a test host other than the development app.
+
+```sh
+python3 - "$XCTESTRUN" "$NO_INSTALL_XCTESTRUN" <<'PY'
+import plistlib
+import sys
+
+with open(sys.argv[1], 'rb') as source:
+    run = plistlib.load(source)
+found = False
+for configuration in run['TestConfigurations']:
+    targets = [t for t in configuration['TestTargets'] if t['BlueprintName'] == 'KeriWalletTests']
+    for target in targets:
+        if target['TestHostBundleIdentifier'] != 'com.kerifoundation.wallet.dev':
+            raise SystemExit('Expected the existing development app')
+        for key in ('TestBundlePath', 'TestHostPath', 'UITargetAppPath', 'DependentProductPaths'):
+            target.pop(key, None)
+        target['UseDestinationArtifacts'] = True
+        target['TestBundleDestinationRelativePath'] = '__TESTHOST__/PlugIns/KeriWalletTests.xctest'
+        found = True
+    configuration['TestTargets'] = targets
+if not found:
+    raise SystemExit('KeriWalletTests target not found')
+with open(sys.argv[2], 'wb') as destination:
+    plistlib.dump(run, destination)
+PY
+```
+
+While online, run the following command with a paired device ID and an unused
+result path. Confirm the output says `Runtime persistence phase: write`. If it
+says `read`, repeat online until a new write completes. Then close the app, verify
+its process has stopped, disable both Wi-Fi and cellular, and run the same command
+with a different result path. Confirm the offline run says `read`, passes without
+skips, and uses a different process ID. Restore connectivity afterward.
+
+```sh
+xcodebuild test-without-building -xctestrun "$NO_INSTALL_XCTESTRUN" \
+  -destination 'platform=iOS,id=DEVICE_UDID' -resultBundlePath RESULT_PATH \
+  -parallel-testing-enabled NO \
+  -only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePersistenceAcrossAppRestart
+```
+
 The candidate's `fort.runtime-requirements.v2` descriptor is rejected by the
 compatibility validator because this host configuration does not establish
 HTTPS wallet-service support and does not declare v2 compatibility. Passing
