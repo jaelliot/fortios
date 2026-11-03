@@ -179,6 +179,55 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
+#### Synthetic native IPEX smoke test
+
+`RuntimeDeviceSmokeTests/testSyntheticNativePresentation` exercises the FortWeb
+`37ce9f3` candidate in a separate, nonpersistent WKWebView data store. The test
+checks the installed manifest and all 160 declared file hashes, issues and
+retrieves a registry-backed synthetic credential, and verifies a presentation in
+a separate verifier vault. It also checks wrong-party and wrong-Grant rejection,
+tamper recovery, writer contention, and retrieval after worker restart.
+
+The test uses the producer's synthetic schema fixture and enables the runtime's
+synthetic-recipient flag only in the test webview. It does not modify the bundled
+configuration. Its in-memory vaults are discarded after the test: they do not
+prove credential persistence across an app restart, network delivery, or external
+SEDI interoperability. The test skips when the installed manifest is not the
+candidate it is pinned to; a skipped test is not a successful candidate check.
+
+From a clean checkout, obtain the verified FortWeb runtime ZIP and import it with
+the canonical importer. The candidate ZIP SHA-256 is
+`6b71231a492906fbbb05e9736a73d7ab393b920a1a5312b4bfe46f579e3a79c5`.
+
+```sh
+shasum -a 256 "$FORTWEB_RUNTIME_ZIP"
+node tools/import-fortweb-runtime-package.mjs "$FORTWEB_RUNTIME_ZIP"
+node tools/assert-payload-integrity.mjs --payload-dir WebPayload
+```
+
+For a physical device, use an existing separately signed development installation
+and review its data before updating it. The following example targets the `.dev`
+app and leaves the project test bundle IDs distinct. Replace the destination ID
+with the paired device and use an unused result path.
+
+```sh
+xcodebuild test \
+  -project KeriWallet.xcodeproj -scheme KeriWallet -configuration Debug \
+  -destination 'platform=iOS,id=DEVICE_UDID' \
+  -derivedDataPath build/DerivedData-runtime-smoke \
+  -resultBundlePath build/RuntimeSmokeDevice.xcresult \
+  -parallel-testing-enabled NO \
+  -only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePresentation \
+  'PRODUCT_BUNDLE_IDENTIFIER=com.kerifoundation.wallet$(FORT_TEST_ID_$(TARGET_NAME))' \
+  FORT_TEST_ID_KeriWallet=.dev FORT_TEST_ID_KeriWalletTests=.tests \
+  FORT_TEST_ID_KeriWalletUITests=.uitests
+```
+
+Inspect the Xcode result bundle and confirm one test passed and none were skipped.
+The existing app's normal persistent vault remains separate from the test store;
+confirm its vault and identifier after updating the development app. The test
+does not delete its host app or require changing certificates or account settings.
+
 ### Node tooling tests
 
 `make test-tools` runs the payload import, validation, and bridge tooling tests

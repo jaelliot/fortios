@@ -1,0 +1,310 @@
+import CryptoKit
+import Foundation
+import WebKit
+import XCTest
+
+@testable import KeriWallet
+
+private final class RuntimeSmokeSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let payload = PayloadSchemeHandler()
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url, url.path == "/runtime-smoke.html" else {
+            payload.webView(webView, start: task)
+            return
+        }
+        let data = Data("<!doctype html><title>Runtime smoke</title>".utf8)
+        guard let response = HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+        ) else {
+            task.didFailWithError(PayloadSchemeError.invalidURL)
+            return
+        }
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {
+        if task.request.url?.path != "/runtime-smoke.html" {
+            payload.webView(webView, stop: task)
+        }
+    }
+}
+
+@MainActor
+private final class RuntimeSmokeNavigation: NSObject, WKNavigationDelegate {
+    let loaded: XCTestExpectation
+
+    init(loaded: XCTestExpectation) {
+        self.loaded = loaded
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        loaded.fulfill()
+    }
+}
+
+@MainActor
+final class RuntimeDeviceSmokeTests: XCTestCase {
+    func testSyntheticNativePresentation() async throws {
+        try verifyInstalledPayload()
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let schemeHandler = RuntimeSmokeSchemeHandler()
+        configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "app")
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let loaded = expectation(description: "isolated runtime test document loads")
+        let navigation = RuntimeSmokeNavigation(loaded: loaded)
+        webView.navigationDelegate = navigation
+        let url = try XCTUnwrap(URL(string: "app://local/runtime-smoke.html"))
+        webView.load(URLRequest(url: url))
+        await fulfillment(of: [loaded], timeout: 30)
+
+        // Same public fixture used by the producer's registry receipt tests.
+        let schema = #"""
+        {"$id":"EPrsJF2BXyDUgDCVbGURsGNwCZjyrxD5M2qnBmhvoZYQ","$schema":"https://json-schema.org/draft/2020-12/schema",
+        "title":"ACM Default Schema","description":"Default JSON Schema for acm ACDC.",
+        "credentialType":"ACDC_acm_message","version":"2.0.0","type":"object","required":["v","d","i","s"],
+        "properties":{"v":{"description":"ACDC version string","type":"string"},
+        "t":{"description":"Message type","type":"string"},"d":{"description":"Message SAID","type":"string"},
+        "u":{"description":"Message UUID","type":"string"},"i":{"description":"Issuer AID","type":"string"},
+        "rd":{"description":"Registry SAID","type":"string"},"s":{"description":"Schema Section","oneOf":[
+        {"description":"Schema Section SAID","type":"string"},
+        {"description":"Uncompacted Schema Section","type":"object"}]},
+        "a":{"description":"Attribute Section","oneOf":[{"description":"Attribute Section SAID","type":"string"},
+        {"description":"Uncompacted Attribute Section","type":"object"}]},
+        "A":{"description":"Aggregate Section","oneOf":[{"description":"Aggregate Section AGID","type":"string"},
+        {"description":"Uncompacted Aggregate Section","type":"array"}]},
+        "e":{"description":"Edge Section","oneOf":[{"description":"Edge Section SAID","type":"string"},
+        {"description":"Uncompacted Edge Section","type":"object"}]},"r":{"description":"Rule Section","oneOf":[
+        {"description":"Rule Section SAID","type":"string"},
+        {"description":"Uncompacted Rule Section","type":"object"}]}},
+        "additionalProperties":false}
+        """#
+
+        let result = try await webView.callAsyncJavaScript(
+            Self.exerciseRuntime, arguments: ["schema": schema], in: nil, contentWorld: .page
+        )
+        let outcome = try XCTUnwrap(result as? [String: Any])
+        let diagnostic = "Runtime test stopped at \(outcome["stage"] ?? "unknown") (\(outcome["code"] ?? "unknown"))"
+        XCTAssertEqual(outcome["ok"] as? Bool, true, diagnostic)
+        XCTAssertEqual(outcome["negativeRejected"] as? Bool, true)
+        XCTAssertEqual(outcome["bindingRejected"] as? Bool, true)
+        XCTAssertEqual(outcome["tamperRecovered"] as? Bool, true)
+        XCTAssertEqual(outcome["recovered"] as? Bool, true)
+        XCTAssertEqual(outcome["contentionRejected"] as? Bool, true)
+        XCTAssertEqual(outcome["restartRecovered"] as? Bool, true)
+        withExtendedLifetime((schemeHandler, navigation)) {}
+    }
+
+    private func verifyInstalledPayload() throws {
+        let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("WebPayload", isDirectory: true)
+        let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard digest == "9a95757579f1f2c79c8841f7151d2d3da16eed61af0fb893852a8c626f984347" else {
+            throw XCTSkip("This smoke test requires the FortWeb 37ce9f3 runtime candidate")
+        }
+        let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(manifest["fortweb_commit_sha"] as? String, "37ce9f39fda858338e68397afa5bcc626b88c72f")
+        let files = try XCTUnwrap(manifest["files"] as? [[String: Any]])
+        XCTAssertEqual(files.count, 160)
+        for file in files {
+            let path = try XCTUnwrap(file["path"] as? String)
+            let expected = try XCTUnwrap(file["sha256"] as? String)
+            let contents = try Data(contentsOf: root.appendingPathComponent(path))
+            let actual = SHA256.hash(data: contents).map { String(format: "%02x", $0) }.joined()
+            XCTAssertEqual(actual, expected, "Installed runtime file differs: \(path)")
+        }
+    }
+
+    private static let exerciseRuntime = #"""
+    let stage = "initialization";
+    let bridge;
+    try {
+        // Match the producer's test-only config override without changing package bytes.
+        const originalFetch = globalThis.fetch.bind(globalThis);
+        globalThis.fetch = async (...args) => {
+            const response = await originalFetch(...args);
+            const url = typeof args[0] === "string" ? args[0] : args[0].url;
+            if (url === "app://local/pyscript-ci.toml") {
+                return { ok: response.ok, status: response.status,
+                    text: async () => "fort_synthetic_recipient_testing = true\n" + await response.text() };
+            }
+            return response;
+        };
+        const { createRuntimeBridge } = await import("app://local/app/runtime/bridge.js");
+        const origin = {
+            schema: "fortweb.runtime-origin.v1", version: 1, platform: "ios-wkwebview",
+            mode: "bundled-offline", documentOrigin: "app://local", appBaseUrl: "app://local",
+            entryUrl: "app://local/app/index.html", workerUrl: "app://local/app/runtime/wallet-worker.py",
+            configUrl: "app://local/pyscript-ci.toml",
+            storage: { storageNamespace: "keri-wallet-ios", indexedDbRequired: true, originPartition: "app://local/" },
+            capabilities: { customScheme: true, httpsLikeAssetOrigin: false, implicitBlobOriginSafe: false,
+                networkAllowed: false, bundledAssetsOnly: true }
+        };
+        const newBridge = () => createRuntimeBridge({ workerUrl: new URL(origin.workerUrl),
+            configUrl: new URL(origin.configUrl), runtimeOriginContract: origin });
+        bridge = newBridge();
+        const request = (method, params = {}) => bridge.request(method, params, 180000);
+        const schemaId = JSON.parse(schema).$id;
+        const require = (condition) => { if (!condition) throw new Error("assertion failed"); };
+
+        stage = "issuer";
+        const sourceId = (await request("vaults.create", {
+            name: "smoke-issuer", passcode: "synthetic-issuer-passcode"})).vault.id;
+        await request("vaults.open", {vaultId: sourceId, passcode: "synthetic-issuer-passcode"});
+        const issuerAid = (await request("identifiers.create", {vaultId: sourceId, alias: "issuer"})).identifier.aid;
+        const issuer = await request("identifiers.export", {vaultId: sourceId, aid: issuerAid});
+        stage = "writer-contention";
+        const rival = newBridge();
+        let contentionRejected = false;
+        try {
+            await rival.request("identifiers.create", {vaultId: sourceId, alias: "rival"}, 180000);
+        } catch (error) {
+            contentionRejected = error?.code === "BUSY" && /already open/i.test(error.message);
+        } finally {
+            rival.destroy();
+        }
+        require(contentionRejected);
+        const identifiers = (await request("identifiers.list", {vaultId: sourceId})).identifiers;
+        require(identifiers.some((identifier) => identifier.aid === issuerAid) &&
+            identifiers.every((identifier) => identifier.alias !== "rival"));
+        await request("vaults.close", {vaultId: sourceId});
+
+        stage = "holder";
+        const holderId = (await request("vaults.create", {
+            name: "smoke-holder", passcode: "synthetic-holder-passcode"})).vault.id;
+        await request("vaults.open", {vaultId: holderId, passcode: "synthetic-holder-passcode"});
+        const holderAid = (await request("identifiers.create", {vaultId: holderId, alias: "holder"})).identifier.aid;
+        const holder = await request("identifiers.export", {vaultId: holderId, aid: holderAid});
+        await request("schemas.import", {vaultId: holderId, schemaId, schema});
+        await request("remotes.import", {vaultId: holderId, alias: "issuer", cesr: issuer.cesr});
+        const presentationRegistry = (await request("registries.create", {vaultId: holderId,
+            issuerAid: holderAid, name: "presentations"})).registry;
+        await request("vaults.close", {vaultId: holderId});
+
+        stage = "issuance";
+        await request("vaults.open", {vaultId: sourceId, passcode: "synthetic-issuer-passcode"});
+        await request("remotes.import", {vaultId: sourceId, alias: "holder", cesr: holder.cesr});
+        await request("schemas.import", {vaultId: sourceId, schemaId, schema});
+        const registry = (await request("registries.create", {
+            vaultId: sourceId, issuerAid, name: "registry"})).registry;
+        const credential = (await request("credentials.issueRegistered", {vaultId: sourceId, name: "registry",
+            requestId: "credential", issuerAid, recipientAid: holderAid, schemaId,
+            attributes: {name: "Synthetic Presentation", rd: presentationRegistry.registryId}})).credential;
+        require(credential.registryId === registry.registryId && credential.sequence === 1);
+        await request("vaults.close", {vaultId: sourceId});
+        await request("vaults.open", {vaultId: sourceId, passcode: "synthetic-issuer-passcode"});
+        const restored = (await request("credentials.getIssued", {vaultId: sourceId,
+            name: "registry", requestId: "credential"})).credential;
+        const recovered = restored.said === credential.said && restored.registryId === registry.registryId;
+        require(recovered);
+        await request("vaults.close", {vaultId: sourceId});
+
+        stage = "receipt";
+        await request("vaults.open", {vaultId: holderId, passcode: "synthetic-holder-passcode"});
+        const receipt = await request("credentials.receive", {vaultId: holderId, syntheticOnly: true,
+            issuerAid, recipientAid: holderAid, schemaId, evidence: credential});
+        require(receipt.credential.issuance === "verified");
+        await request("vaults.close", {vaultId: holderId});
+
+        stage = "verifier";
+        const verifierId = (await request("vaults.create", {
+            name: "smoke-verifier", passcode: "synthetic-verifier-passcode"})).vault.id;
+        await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
+        const verifierAid = (await request("identifiers.create", {
+            vaultId: verifierId, alias: "verifier"})).identifier.aid;
+        const verifier = await request("identifiers.export", {vaultId: verifierId, aid: verifierAid});
+        await request("schemas.import", {vaultId: verifierId, schemaId, schema});
+        await request("remotes.import", {vaultId: verifierId, alias: "issuer", cesr: issuer.cesr});
+        await request("remotes.import", {vaultId: verifierId, alias: "holder", cesr: holder.cesr});
+        await request("vaults.close", {vaultId: verifierId});
+
+        stage = "presentation";
+        await request("vaults.open", {vaultId: holderId, passcode: "synthetic-holder-passcode"});
+        await request("remotes.import", {vaultId: holderId, alias: "verifier", cesr: verifier.cesr});
+        const presentation = await request("ipex.present", {vaultId: holderId, syntheticOnly: true,
+            credentialSaid: credential.said, presenterAid: holderAid, verifierAid,
+            message: "Synthetic presentation", presentationRegistry: "presentations"});
+        require(presentation.exchange.route === "/ipex/grant" &&
+            presentation.presentation.grantSaid === presentation.exchange.said &&
+            presentation.presentation.registryId === presentationRegistry.registryId);
+        await request("vaults.close", {vaultId: holderId});
+
+        stage = "verification";
+        await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
+        const verification = {vaultId: verifierId, syntheticOnly: true, cesr: presentation.exchange.cesr,
+            evidence: presentation.evidence, presenterAid: holderAid, verifierAid,
+            presentation: presentation.presentation};
+        let negativeRejected = false;
+        try {
+            await request("ipex.verifyPresentation", {...verification, presenterAid: issuerAid});
+        } catch (error) {
+            negativeRejected = error?.code === "VALIDATION" && /holder and presentation parties/i.test(error.message);
+        }
+        require(negativeRejected);
+        let bindingRejected = false;
+        try {
+            await request("ipex.verifyPresentation", {...verification,
+                presentation: {...presentation.presentation, grantSaid: credential.said}});
+        } catch (error) {
+            bindingRejected = error?.code === "VALIDATION" && /does not bind this Grant/i.test(error.message);
+        }
+        require(bindingRejected);
+        stage = "tamper-recovery";
+        const bytes = Uint8Array.from(atob(presentation.exchange.cesr), (value) => value.charCodeAt(0));
+        bytes[bytes.length - 1] ^= 1;
+        const tampered = btoa(Array.from(bytes, (value) => String.fromCharCode(value)).join(""));
+        let tamperRejected = false;
+        try {
+            await request("ipex.verifyPresentation", {...verification, cesr: tampered});
+        } catch (_) {
+            tamperRejected = true;
+        }
+        require(tamperRejected);
+        let failClosed = false;
+        try {
+            await request("ipex.get", {vaultId: verifierId, syntheticOnly: true, said: presentation.exchange.said});
+        } catch (error) {
+            failClosed = /persistence failed/i.test(error.message);
+        }
+        require(failClosed);
+        await request("vaults.close", {vaultId: verifierId});
+        await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
+        let absent = false;
+        try {
+            await request("ipex.get", {vaultId: verifierId, syntheticOnly: true, said: presentation.exchange.said});
+        } catch (error) {
+            absent = /was not found/i.test(error.message);
+        }
+        const tamperRecovered = failClosed && absent;
+        require(tamperRecovered);
+        stage = "valid-verification-after-recovery";
+        const verified = await request("ipex.verifyPresentation", verification);
+        require(verified.exchange.said === presentation.exchange.said && verified.credential.said === credential.said);
+        await request("vaults.close", {vaultId: verifierId});
+        await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
+        const persisted = await request("ipex.get", {
+            vaultId: verifierId, syntheticOnly: true, said: presentation.exchange.said});
+        require(persisted.exchange.said === presentation.exchange.said);
+        await request("vaults.close", {vaultId: verifierId});
+        stage = "worker-restart";
+        bridge.destroy();
+        bridge = newBridge();
+        await request("vaults.open", {vaultId: verifierId, passcode: "synthetic-verifier-passcode"});
+        const afterRestart = await request("ipex.get", {
+            vaultId: verifierId, syntheticOnly: true, said: presentation.exchange.said});
+        const restartRecovered = afterRestart.exchange.said === presentation.exchange.said;
+        require(restartRecovered);
+        await request("vaults.close", {vaultId: verifierId});
+        return {ok: true, negativeRejected, bindingRejected, tamperRecovered, recovered,
+            contentionRejected, restartRecovered};
+    } catch (error) {
+        return {ok: false, stage, code: typeof error?.code === "string" ? error.code : "ERROR"};
+    } finally {
+        bridge?.destroy();
+    }
+    """#
+}
