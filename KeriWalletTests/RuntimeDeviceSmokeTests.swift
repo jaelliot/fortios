@@ -7,16 +7,41 @@ import XCTest
 
 private final class RuntimeSmokeSchemeHandler: NSObject, WKURLSchemeHandler {
     private let payload = PayloadSchemeHandler()
+    private let policy: String?
+
+    init(policy: String? = nil) {
+        self.policy = policy
+    }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        if let policy, let url = task.request.url, url.path != "/runtime-smoke.html" {
+            do {
+                let (data, _, originalHeaders) = try payload.loadResource(for: url)
+                var headers = originalHeaders
+                headers["Content-Security-Policy"] = policy
+                guard let response = HTTPURLResponse(
+                    url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers
+                ) else {
+                    throw PayloadSchemeError.invalidURL
+                }
+                task.didReceive(response)
+                task.didReceive(data)
+                task.didFinish()
+            } catch {
+                task.didFailWithError(error)
+            }
+            return
+        }
         guard let url = task.request.url, url.path == "/runtime-smoke.html" else {
             payload.webView(webView, start: task)
             return
         }
         let data = Data("<!doctype html><title>Runtime smoke</title>".utf8)
+        var headers = ["Content-Type": "text/html; charset=utf-8"]
+        if let policy { headers["Content-Security-Policy"] = policy }
         guard let response = HTTPURLResponse(
             url: url, statusCode: 200, httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+            headerFields: headers
         ) else {
             task.didFailWithError(PayloadSchemeError.invalidURL)
             return
@@ -56,7 +81,11 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         try await exercise(persistent: true)
     }
 
-    private func exercise(persistent: Bool) async throws {
+    func testStrictRuntimePolicyReportsPyScriptEvaluationBlock() async throws {
+        try await exercise(persistent: false, strictPolicy: true)
+    }
+
+    private func exercise(persistent: Bool, strictPolicy: Bool = false) async throws {
         try verifyInstalledPayload()
         let checkpointKey = "org.kerifoundation.runtime-persistence-test-v1"
         let checkpoint = persistent ? UserDefaults.standard.dictionary(forKey: checkpointKey) : nil
@@ -71,7 +100,11 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         } else {
             configuration.websiteDataStore = .nonPersistent()
         }
-        let schemeHandler = RuntimeSmokeSchemeHandler()
+        let policy = strictPolicy
+            ? "default-src 'none'; script-src app: 'wasm-unsafe-eval'; " +
+              "worker-src app: blob:; connect-src app: https:; img-src app: blob: data:; style-src app: 'unsafe-inline'"
+            : nil
+        let schemeHandler = RuntimeSmokeSchemeHandler(policy: policy)
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "app")
         let webView = WKWebView(frame: .zero, configuration: configuration)
         let loaded = expectation(description: "isolated runtime test document loads")
@@ -81,6 +114,20 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         webView.load(URLRequest(url: url))
         await fulfillment(of: [loaded], timeout: 30)
 
+        if strictPolicy {
+            let result = try await webView.callAsyncJavaScript(
+                """
+                let evaluation = false, wasm = false;
+                try { evaluation = eval('40 + 2') === 42; } catch (_) {}
+                try { await WebAssembly.instantiate(new Uint8Array([0,97,115,109,1,0,0,0])); wasm = true; } catch (_) {}
+                return {evaluation, wasm};
+                """, arguments: [:], in: nil, contentWorld: .page
+            )
+            let checks = try XCTUnwrap(result as? [String: Any])
+            XCTAssertEqual(checks["evaluation"] as? Bool, false)
+            XCTAssertEqual(checks["wasm"] as? Bool, true)
+        }
+
         let result = try await webView.callAsyncJavaScript(
             Self.exerciseRuntime, arguments: ["schema": Self.schema, "persistent": persistent,
                                                "processId": ProcessInfo.processInfo.processIdentifier,
@@ -88,6 +135,13 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
             in: nil, contentWorld: .page
         )
         let outcome = try XCTUnwrap(result as? [String: Any])
+        if strictPolicy {
+            XCTAssertEqual(outcome["ok"] as? Bool, false)
+            XCTAssertEqual(outcome["stage"] as? String, "issuer")
+            XCTAssertEqual(outcome["failureClass"] as? String, "csp-eval")
+            withExtendedLifetime((schemeHandler, navigation)) {}
+            return
+        }
         let diagnostic = "Runtime test stopped at \(outcome["stage"] ?? "unknown") (\(outcome["code"] ?? "unknown"))"
         XCTAssertEqual(outcome["ok"] as? Bool, true, diagnostic)
         if persistent {
@@ -419,7 +473,8 @@ private extension RuntimeDeviceSmokeTests {
         return {ok: true, negativeRejected, bindingRejected, tamperRecovered, recovered,
             contentionRejected, restartRecovered};
     } catch (error) {
-        return {ok: false, stage, code: typeof error?.code === "string" ? error.code : "ERROR"};
+        return {ok: false, stage, code: typeof error?.code === "string" ? error.code : "ERROR",
+            failureClass: /content security|unsafe-eval|EvalError/i.test(String(error?.message)) ? "csp-eval" : "other"};
     } finally {
         bridge?.destroy();
     }
