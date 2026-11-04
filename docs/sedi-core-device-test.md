@@ -78,3 +78,33 @@ These results use a developer file-transfer channel and synthetic credentials.
 Signing-root confidentiality, runtime-requirements v2, pending-operation
 recovery, durable message handling, and real service transport need separate
 qualification. Desktop Locksmith remains an available demonstration fallback.
+
+## Reproduce the qualified package
+
+The example package above was reproduced byte for byte using the FortWeb
+candidate commit and the matching qualified runtime tree and source manifest.
+The source manifest SHA-256 was
+`f76cf23f5cdaa5fe3f7a0e264c862290f9c8b6be2aafca6622926e1869731431`.
+The Node 22.12.0 executable used for that build had SHA-256
+`53dc65febda99ecaafe692de5ec60efdc2f7bd4fb14d1ba8cd30dc2af103953f`.
+Using a different Node binary changes package provenance and therefore the ZIP
+and manifest hashes, even when the application files match.
+
+From the FortWeb checkout at the recorded commit, with the reviewed qualified
+runtime tree and source manifest available, run:
+
+```sh
+PATH="$(dirname "$NODE22"):$PATH" "$NODE22" tools/package-runtime.mjs \
+  --runtime-dir "$QUALIFIED_RUNTIME_DIR" \
+  --source-manifest "$QUALIFIED_SOURCE_MANIFEST" \
+  --source-manifest-sha256 f76cf23f5cdaa5fe3f7a0e264c862290f9c8b6be2aafca6622926e1869731431 \
+  --python "$KERIPY_PYTHON" \
+  --output-dir "$NEW_PACKAGE_DIRECTORY" \
+  --ref refs/heads/test/sedi-csp-candidate
+```
+
+Check the resulting ZIP against the package SHA-256 above before importing it.
+This reproduces the package from already-prepared runtime inputs; it does not
+establish a fresh build of those inputs or a published, attested release. Keep
+the reviewed inputs and local candidate commits available until the release
+workflow has made them accessible to the intended operators.
