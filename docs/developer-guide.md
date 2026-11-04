@@ -314,6 +314,13 @@ compatibility validator because this host configuration does not establish
 HTTPS wallet-service support and does not declare v2 compatibility. Passing
 this device test does not resolve that separate compatibility failure.
 
+`testStrictRuntimePolicyReportsPyScriptEvaluationBlock` characterizes the
+pinned candidate under a policy that permits WebAssembly but blocks JavaScript
+string evaluation. It expects the current PyScript worker setup to fail at
+that boundary. A passing test records the incompatibility; it does not mean
+the host satisfies runtime requirements v2. The test skips when the installed
+payload does not match the pinned candidate.
+
 ### Node tooling tests
 
 `make test-tools` runs the payload import, validation, and bridge tooling tests
