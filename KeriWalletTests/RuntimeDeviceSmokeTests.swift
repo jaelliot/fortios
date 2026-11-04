@@ -5,7 +5,7 @@ import XCTest
 
 @testable import KeriWallet
 
-private final class RuntimeSmokeSchemeHandler: NSObject, WKURLSchemeHandler {
+final class RuntimeSmokeSchemeHandler: NSObject, WKURLSchemeHandler {
     private let payload = PayloadSchemeHandler()
     private let policy: String?
 
@@ -59,7 +59,7 @@ private final class RuntimeSmokeSchemeHandler: NSObject, WKURLSchemeHandler {
 }
 
 @MainActor
-private final class RuntimeSmokeNavigation: NSObject, WKNavigationDelegate {
+final class RuntimeSmokeNavigation: NSObject, WKNavigationDelegate {
     let loaded: XCTestExpectation
 
     init(loaded: XCTestExpectation) {
