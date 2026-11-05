@@ -8,7 +8,8 @@ transport or establish production readiness.
 
 ## Prerequisites
 
-- A connected, unlocked physical iPhone and an existing development-signed app.
+- A Mac with Xcode and its command-line tools, plus a paired, connected,
+  unlocked physical iPhone and an existing development-signed app.
 - An iOS `build-for-testing` output containing the Core SEDI test and the
   intended FortWeb payload. Use the existing signing identity and app identifier.
 - The FortWeb checkout containing the Core SEDI reference and verifier fixtures.
@@ -17,11 +18,16 @@ transport or establish production readiness.
 - The expected FortWeb commit and SHA-256 of the payload manifest. The command
   verifies the app identifier, installed developer app, manifest, and each
   manifested file before running the device test.
+- To reuse the installed app, that exact app must already contain the matching
+  `KeriWalletTests.xctest` bundle and Core SEDI test. The device test verifies
+  the installed payload before exercising it.
 
-The test updates the specified development app without uninstalling it. It uses
-a nonpersistent WebView and creates a uniquely named synthetic test directory in
-that app's Documents directory. Existing directories are not deleted. The output
-directory must not already exist, and is retained for diagnosis.
+By default Xcode may update the specified development app without uninstalling
+it. Use `--reuse-installed-app` to run the already-installed test bundle without
+reinstalling the app. The test uses a nonpersistent WebView and creates a new
+synthetic vault and uniquely named directory in the app's Documents directory
+on each run. Existing directories are not deleted. The output directory must not
+already exist, and is retained for diagnosis.
 
 ## Run
 
@@ -29,7 +35,7 @@ From the Fort-ios repository root, set the variables to the reviewed paths and
 identifiers for the local build and device, then run:
 
 ```sh
-python tools/sedi-core-device-test.py \
+"$KERIPY_PYTHON" tools/sedi-core-device-test.py \
   --device "$IPHONE_DEVICE_ID" \
   --bundle "$DEVELOPMENT_APP_BUNDLE_ID" \
   --xctestrun "$SIGNED_XCTESTRUN" \
@@ -37,7 +43,8 @@ python tools/sedi-core-device-test.py \
   --fortweb "$FORTWEB_SOURCE" \
   --output "$NEW_RESULTS_DIRECTORY" \
   --manifest-sha256 "$MANIFEST_SHA256" \
-  --fortweb-commit "$FORTWEB_COMMIT"
+  --fortweb-commit "$FORTWEB_COMMIT" \
+  --reuse-installed-app
 ```
 
 The command preloads native verifiers, transfers the fresh signed Grant, checks
@@ -46,6 +53,9 @@ using the KERIpy test's unmodified KRAM configuration. It also checks a stale
 replay. A successful run exits zero and writes the report, verifier logs, and
 XCTest result bundle to the output directory. A nonzero exit is a failure;
 inspect the retained logs and do not treat a partial report as acceptance.
+If the installed app lacks the matching test bundle, stop and prepare a reviewed
+development build before trying again. Do not switch to a production app or
+remove the installed app to work around the failure.
 
 The negative cases omit the Unit or Agent authority, remove a proof, or use a
 different Grant binding. Each must first pass KRAM authentication. The test also
@@ -58,6 +68,69 @@ accepted native exchange. The transferred Grant file is test-owned; this does
 not establish durable application inbox or outbox storage, nor persistence over
 an app or device restart.
 
+## Demonstration walkthrough
+
+This is a developer-assisted synthetic demonstration. The test runs in an
+off-screen WebView on the physical iPhone; it is not a credential presentation
+through the app's user interface. The Mac supplies synthetic issuer and
+authority fixtures and receives the Grant through Xcode's device file transfer.
+The native KERIpy verifier runs on the Mac, not on an independent service.
+
+1. Before the session, rehearse the command above with the reviewed signed build,
+   runtime package, native verifier, and connected iPhone. Use synthetic data
+   only and confirm the phone is unlocked. Choose a new results directory for
+   each run.
+2. Run the command above. The test prepares a synthetic holder and credential
+   evidence, then creates the signed Core Grant in the iPhone's WebView. The
+   native verifier checks the transferred Grant and its authority evidence.
+3. After the command exits successfully, display the report:
+
+   ```sh
+   python3 -m json.tool "$NEW_RESULTS_DIRECTORY/report.json"
+   ```
+
+   Check that `native` contains `valid`, `wrong`, `missing`, `missingAgent`,
+   `missingProof`, and `rechecked`, all `true`. The `recovery` results
+   `credentialRecovered`, `bindingRecovered`, and `grantMetadataRecovered`
+   must also be `true`. Check `stale_rejected_by_kram` is `true` and
+   `xctest_exit_code` is `0`. Use the verifier logs and XCTest result bundle in
+   the results directory for details; inspect the XCTest result for failures or
+   skips. A report alone is not a substitute for a successful command and test.
+4. Explain that the valid synthetic presentation was accepted and the test's
+   invalid variants were rejected. The recovery result covers a worker restart
+   in the test WebView. It does not show a real service exchange, an app restart,
+   a finished wallet interface, or production readiness.
+
+To display the positive and wrong-binding verifier outcomes without displaying
+the fixture data, use:
+
+```sh
+grep -F 'Native verifier' "$NEW_RESULTS_DIRECTORY/verifier-valid.log" \
+  "$NEW_RESULTS_DIRECTORY/verifier-wrong.log"
+```
+
+## Troubleshooting and stop conditions
+
+- If Xcode cannot find the device, check the cable, pairing, Developer Mode and
+  lock state. Preserve the app and its data; do not uninstall it.
+- If the manifest, commit, development-app identity or test bundle does not
+  match, stop and restore the reviewed inputs. Do not substitute a different
+  payload or signing identity.
+- If the fresh Grant fails KRAM authentication, retain the logs, check device
+  and host clocks and handoff timing, then rerun with a new output directory.
+  Do not change the signed timestamp or relax KRAM freshness settings.
+- If an operation is incomplete, preserve the output and signed state. Do not
+  clear a pending marker or retry writes in that vault. Each test invocation
+  already uses fresh synthetic state; it does not repair an existing vault.
+- A failed, skipped, or incomplete test is not a live demonstration success.
+  Use a clearly labelled prior result as a fallback and investigate before
+  claiming a new pass. Test outputs contain synthetic evidence and local device
+  metadata; review them before sharing.
+
+If the live run cannot complete, use the retained qualification evidence below
+as a record of a previous run and identify it as such. Keep the runtime v2 and
+signing-root limitations visible; do not use real credentials for this test.
+
 ## Example qualification evidence
 
 On 2026-11-04, one synthetic run passed on an iPhone 17 running iOS 27.0.1:
@@ -66,6 +139,8 @@ On 2026-11-04, one synthetic run passed on an iPhone 17 running iOS 27.0.1:
 - Fort-ios base commit: `d9c63984f5a62e8293679a5e68625d0b46c03eda`, with
   development test changes present in the build.
 - Native KERIpy source: `84301a9ff4bbb644ce134f9649ad56b49aa130f2`.
+- The development app was `com.kerifoundation.wallet.cspcheck`, using the
+  `KeriWalletTests/CoreSediDeviceTests/testSyntheticCorePresentation` test.
 - FortWeb runtime package SHA-256:
   `425e06847dbdb617b27a5bf66ebed0bec8336dae0c18902d3f30a37b814cfb36`.
 - Bundled manifest SHA-256:
@@ -73,6 +148,11 @@ On 2026-11-04, one synthetic run passed on an iPhone 17 running iOS 27.0.1:
 - The verifier accepted the fresh Grant at approximately 1.30 seconds of age;
   four invalid variants and a stale replay were rejected. The selected XCTest
   passed with zero skips.
+
+The ZIP hash covers the runtime package archive. The manifest hash covers the
+bundled `manifest.json` bytes. Each run's `cesr_sha256` covers the signed Grant
+bytes and changes when a fresh synthetic Grant is generated; these hashes are
+for different artifacts and are not interchangeable.
 
 These results use a developer file-transfer channel and synthetic credentials.
 Signing-root confidentiality, runtime-requirements v2, pending-operation

@@ -11,9 +11,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sedi_core_test_validation import recovery_complete
+
 parser = argparse.ArgumentParser(description="Run the synthetic Core SEDI test on a physical iPhone")
 for option in ("device", "bundle", "xctestrun", "keripy", "fortweb", "output", "manifest-sha256", "fortweb-commit"):
     parser.add_argument(f"--{option}", required=True)
+parser.add_argument("--reuse-installed-app", action="store_true")
 args = parser.parse_args()
 KERIPY = Path(args.keripy).resolve(strict=True)
 FORTWEB = Path(args.fortweb).resolve(strict=True)
@@ -81,6 +84,17 @@ subprocess.run(["xcrun", "devicectl", "device", "info", "apps", "--device", DEVI
 apps = json.loads(installed_info.read_text())["result"]["apps"]
 if len(apps) != 1 or apps[0].get("bundleIdentifier") != BUNDLE or not apps[0].get("builtByDeveloper"):
     raise ValueError("requested development app is not installed")
+if args.reuse_installed_app:
+    configuration["TestConfigurations"] = [
+        config for config in configuration["TestConfigurations"]
+        if any(candidate is target for candidate in config["TestTargets"])
+    ]
+    for config in configuration["TestConfigurations"]:
+        config["TestTargets"] = [target]
+    for key in ("TestBundlePath", "TestHostPath", "UITargetAppPath", "DependentProductPaths"):
+        target.pop(key, None)
+    target["UseDestinationArtifacts"] = True
+    target["TestBundleDestinationRelativePath"] = "__TESTHOST__/PlugIns/KeriWalletTests.xctest"
 test_env = {"SEDI_TEST_RUN_ID": RUN_ID, "SEDI_MANIFEST_SHA256": args.manifest_sha256,
             "SEDI_FORTWEB_COMMIT": args.fortweb_commit, "SEDI_APP_BUNDLE_ID": BUNDLE}
 target.setdefault("EnvironmentVariables", {}).update(test_env)
@@ -189,6 +203,8 @@ try:
     valid_output = wait_output("valid", "ACCEPTED")
     outcomes["valid"] = "accepted Core Grant and all three authority nodes" in valid_output
     recovery = json.loads(receive("recovered.json").read_text())
+    if not recovery_complete(recovery):
+        raise AssertionError("Core credential, binding, or Grant metadata was not recovered")
     children["valid"].stdin.write("recheck\n")
     children["valid"].stdin.flush()
     code = children["valid"].wait(timeout=120)
