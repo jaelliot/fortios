@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sedi_core_test_validation import recovery_complete
+from sedi_core_test_validation import recovery_complete, xctest_passed
 
 parser = argparse.ArgumentParser(description="Run the synthetic Core SEDI test on a physical iPhone")
 for option in ("device", "bundle", "xctestrun", "keripy", "fortweb", "output", "manifest-sha256", "fortweb-commit"):
@@ -226,6 +226,14 @@ try:
               "device_export_after_grant_seconds": timing["wallSeconds"] - timestamp.timestamp()}
     exit_code = test_process.wait(timeout=120)
     report["xctest_exit_code"] = exit_code
+    if exit_code:
+        raise RuntimeError(f"XCTest exited with code {exit_code}")
+    result_summary = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary",
+                                     "--path", str(ROOT / "result.xcresult"), "--compact"],
+                                    capture_output=True, text=True, check=True, timeout=30)
+    report["xctest"] = json.loads(result_summary.stdout)
+    if not xctest_passed(report["xctest"]):
+        raise AssertionError("XCTest did not report exactly one pass with zero failures or skips")
     drift, short_lag, *_ = _KRAM_CONFIG["kram"]["caches"]["~"]
     while (datetime.now(timezone.utc) - timestamp).total_seconds() <= (drift + short_lag) / 1000 + 1:
         time.sleep(0.1)
