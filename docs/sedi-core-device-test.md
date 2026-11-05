@@ -114,9 +114,10 @@ The native KERIpy verifier runs on the Mac, not on an independent service.
    runtime package, native verifier, and connected iPhone. Use synthetic data
    only and confirm the phone is unlocked. Choose a new results directory for
    each run.
-2. Run the command above. The test prepares a synthetic holder and credential
-   evidence, then creates the signed Core Grant in the iPhone's WebView. The
-   native verifier checks the transferred Grant and its authority evidence.
+2. Run the command above. Add `--app-restart` to demonstrate recovery across
+   an application-process stop; without it, the recovery check restarts the
+   worker. The test creates the signed Core Grant in the iPhone's WebView, and
+   the native verifier checks the transferred Grant and its authority evidence.
 3. After the command exits successfully, display the report:
 
    ```sh
@@ -130,10 +131,12 @@ The native KERIpy verifier runs on the Mac, not on an independent service.
    `xctest_exit_code` is `0`. Use the verifier logs and XCTest result bundle in
    the results directory for details; inspect the XCTest result for failures or
    skips. A report alone is not a substitute for a successful command and test.
-4. Explain that the valid synthetic presentation was accepted and the test's
-   invalid variants were rejected. The recovery result covers a worker restart
-   in the test WebView. It does not show a real service exchange, an app restart,
-   a finished wallet interface, or production readiness.
+4. Explain that the valid synthetic presentation was accepted and invalid
+   variants were rejected. A successful default run demonstrates worker recovery;
+   a successful `--app-restart` run demonstrates recovery in a new app process
+   and includes `read_xctest` and `process_recovery` in the report. Neither mode
+   proves a complete application-owned Grant outbox or a live service exchange.
+   This is not a finished wallet interface or production readiness.
 
 To display the positive and wrong-binding verifier outcomes without displaying
 the fixture data, use:
