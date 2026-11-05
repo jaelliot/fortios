@@ -16,8 +16,9 @@ transport or establish production readiness.
 - A KERIpy source checkout containing the SEDI tests, and a Python environment
   with its dependencies installed. Run the command with that environment's Python.
 - The expected FortWeb commit and SHA-256 of the payload manifest. The command
-  verifies the app identifier, installed developer app, manifest, and each
-  manifested file before running the device test.
+  checks the local test host and installed developer-app identifier before
+  launch; the selected device test checks the installed manifest and each
+  manifested file before exercising the runtime.
 - To reuse the installed app, that exact app must already contain the matching
   `KeriWalletTests.xctest` bundle and Core SEDI test. The device test verifies
   the installed payload before exercising it.
@@ -47,6 +48,22 @@ identifiers for the local build and device, then run:
   --reuse-installed-app
 ```
 
+For the two-process recovery scenario, add `--app-restart`. It requires
+`--reuse-installed-app`: the existing app must already contain this version of
+the test bundle. The write phase uses a fresh run-specific persistent WebKit
+store, closes the synthetic vault, and records public identifiers and digests.
+After XCTest completes, the controller checks that the original process is gone,
+then starts the read phase and requires a different process and matching stored
+state. Each phase must report exactly one passing test and no failures or skips.
+The native verifier checks the fresh Grant before the restart and rechecks its
+previously accepted exchange afterward. The read phase does not call the
+presentation-creation API.
+
+Installing a revised test bundle may replace the development app. Before any
+installation, compare the app identifier, signing team, test host, and installed
+app and obtain the required approval. Do not uninstall or clear storage. Preserve
+the result directory and app state if either phase fails.
+
 The command preloads native verifiers, transfers the fresh signed Grant, checks
 its device and host CESR SHA-256 digests, and runs positive and negative cases
 using the KERIpy test's unmodified KRAM configuration. It also checks a stale
@@ -61,12 +78,29 @@ The negative cases omit the Unit or Agent authority, remove a proof, or use a
 different Grant binding. Each must first pass KRAM authentication. The test also
 checks that invalid preflight requests do not change the holder KEL.
 
-The recovery check closes and reopens the synthetic vault and restarts its
-worker within the same WebView. It compares the recovered credential evidence,
-presentation-registry binding, and Grant metadata, then rechecks the previously
-accepted native exchange. The transferred Grant file is test-owned; this does
-not establish durable application inbox or outbox storage, nor persistence over
-an app or device restart.
+The default recovery check closes and reopens the synthetic vault and restarts
+its worker within the same WebView. With `--app-restart`, it additionally compares
+the original KEL and presentation TEL digests, binding, credential evidence,
+nested substreams and selected signed-state digests after a process stop. The
+native verifier retains its own accepted exchange and authority-registry inputs.
+The transferred Grant file is test-owned; this does not establish complete
+application inbox or outbox storage or persistence across a device reboot.
+
+In three physical iPhone 17 runs on iOS 27.0.1, the `--app-restart` flow
+passed both XCTest phases with zero skips. Each run recovered the original
+holder, credential, presentation binding, TEL event hashes, Grant metadata,
+and three nested substream hashes in a different app process. The nested
+substreams matched the native parser's serialization of the original Grant.
+The native verifier accepted the fresh Grant and rechecked its previously
+accepted exchange after recovery. The final-candidate single-credential test
+also passed write and read phases in different app processes.
+
+Missing, incorrect, and already-consumed checkpoints produced the expected
+XCTest failures. Missing credential and mismatched binding checks failed
+closed; pending markers are checked before and after recovery. The invalid
+preflight checks compare the holder KEL, but do not independently compare TEL
+bytes before and after those rejected requests. Physical failure-injection of
+pending markers and offline cold-launch recovery remain untested.
 
 ## Demonstration walkthrough
 

@@ -6,10 +6,12 @@ import os
 import plistlib
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from sedi_core_test_validation import recovery_complete, xctest_passed
 
@@ -17,12 +19,17 @@ parser = argparse.ArgumentParser(description="Run the synthetic Core SEDI test o
 for option in ("device", "bundle", "xctestrun", "keripy", "fortweb", "output", "manifest-sha256", "fortweb-commit"):
     parser.add_argument(f"--{option}", required=True)
 parser.add_argument("--reuse-installed-app", action="store_true")
+parser.add_argument("--app-restart", action="store_true")
 args = parser.parse_args()
+if args.app_restart and not args.reuse_installed_app:
+    parser.error("--app-restart requires --reuse-installed-app")
 KERIPY = Path(args.keripy).resolve(strict=True)
 FORTWEB = Path(args.fortweb).resolve(strict=True)
 TEST_RUN = Path(args.xctestrun).resolve(strict=True)
 sys.path[:0] = [str(KERIPY / "src"), str(KERIPY)]
-from keri.core import SerderKERI
+from keri import Vrsn_2_0
+from keri.core import Parser, SerderKERI
+from keri.peer.exchanging import serializeParsedSubstream
 from tests.sedi.test_ipex_sedi import _KRAM_CONFIG
 
 DEVICE = args.device
@@ -32,6 +39,16 @@ REMOTE = f"Documents/sedi-core-qualification-{RUN_ID}"
 ROOT = Path(args.output).resolve()
 FIXTURE = FORTWEB / "playwright/fixtures/sedi-core-reference.py"
 VERIFIER = FORTWEB / "playwright/fixtures/sedi-core-verifier.py"
+head = subprocess.run(["git", "-C", str(FORTWEB), "rev-parse", "HEAD"],
+                      check=True, capture_output=True, text=True).stdout.strip()
+if head != args.fortweb_commit:
+    raise ValueError("FortWeb source differs from the requested commit")
+for fixture in (FIXTURE, VERIFIER):
+    committed = subprocess.run(["git", "-C", str(FORTWEB), "show",
+                                f"{head}:{fixture.relative_to(FORTWEB)}"],
+                               check=True, capture_output=True).stdout
+    if fixture.read_bytes() != committed:
+        raise ValueError("Native verifier fixture differs from the requested commit")
 MODES = ("valid", "wrong", "missing", "missing-agent", "missing-proof")
 ROOT.mkdir(exist_ok=False)
 children = {}
@@ -97,6 +114,8 @@ if args.reuse_installed_app:
     target["TestBundleDestinationRelativePath"] = "__TESTHOST__/PlugIns/KeriWalletTests.xctest"
 test_env = {"SEDI_TEST_RUN_ID": RUN_ID, "SEDI_MANIFEST_SHA256": args.manifest_sha256,
             "SEDI_FORTWEB_COMMIT": args.fortweb_commit, "SEDI_APP_BUNDLE_ID": BUNDLE}
+if args.app_restart:
+    test_env["SEDI_TEST_PHASE"] = "write"
 target.setdefault("EnvironmentVariables", {}).update(test_env)
 target.setdefault("TestingEnvironmentVariables", {}).update(test_env)
 configured_run = ROOT / "configured.xctestrun"
@@ -118,11 +137,11 @@ def receive(name, timeout=180):
     destination = ROOT / name
     end = time.monotonic() + timeout
     while time.monotonic() < end:
-        if test_process is not None and test_process.poll() is not None:
-            raise RuntimeError(f"XCTest ended before producing {name}")
         result = device_copy("from", f"{REMOTE}/{name}", destination)
         if result.returncode == 0 and destination.is_file():
             return destination
+        if test_process is not None and test_process.poll() is not None:
+            raise RuntimeError(f"XCTest ended before producing {name}")
         time.sleep(0.1)
     raise TimeoutError(f"device did not provide {name}")
 
@@ -143,6 +162,43 @@ def wait_output(mode, marker, timeout=120):
             raise RuntimeError(f"{mode} verifier exited before {marker}")
         time.sleep(0.1)
     raise TimeoutError(f"{mode} verifier did not reach {marker}")
+
+
+def check_xctest(bundle):
+    result = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary",
+                             "--path", str(bundle), "--compact"],
+                            capture_output=True, text=True, check=True, timeout=30)
+    summary = json.loads(result.stdout)
+    if not xctest_passed(summary):
+        raise AssertionError("XCTest did not report exactly one pass with zero failures or skips")
+    return {key: summary[key] for key in ("result", "totalTestCount", "passedTests",
+                                          "failedTests", "skippedTests", "expectedFailures")}
+
+
+def device_processes():
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / "processes.json"
+        subprocess.run(["xcrun", "devicectl", "device", "info", "processes", "--device", DEVICE,
+                        "--json-output", str(path), "--timeout", "20", "--quiet"],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30)
+        return json.loads(path.read_text())["result"]["runningProcesses"]
+
+
+def stop_original_process(pid):
+    processes = device_processes()
+    matches = [item for item in processes if item["processIdentifier"] == pid]
+    if matches:
+        app_path = unquote(urlparse(apps[0]["url"]).path).rstrip("/")
+        if matches[0]["executable"] != app_path + "/KeriWallet":
+            raise RuntimeError("Original PID no longer belongs to the development app")
+        subprocess.run(["xcrun", "devicectl", "device", "process", "terminate", "--device", DEVICE,
+                        "--pid", str(pid), "--timeout", "20", "--quiet"],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30)
+    for _ in range(30):
+        if all(item["processIdentifier"] != pid for item in device_processes()):
+            return
+        time.sleep(1)
+    raise RuntimeError("Original development app process is still running")
 
 
 try:
@@ -205,11 +261,25 @@ try:
     recovery = json.loads(receive("recovered.json").read_text())
     if not recovery_complete(recovery):
         raise AssertionError("Core credential, binding, or Grant metadata was not recovered")
-    children["valid"].stdin.write("recheck\n")
-    children["valid"].stdin.flush()
-    code = children["valid"].wait(timeout=120)
-    output = (ROOT / "verifier-valid.log").read_text()
-    outcomes["rechecked"] = code == 0 and "rechecked the original accepted Core Grant" in output
+    if not args.app_restart:
+        children["valid"].stdin.write("recheck\n")
+        children["valid"].stdin.flush()
+        code = children["valid"].wait(timeout=120)
+        output = (ROOT / "verifier-valid.log").read_text()
+        outcomes["rechecked"] = code == 0 and "rechecked the original accepted Core Grant" in output
+    else:
+        outcomes["rechecked"] = False
+        checkpoint = json.loads(receive("core-checkpoint.json").read_text())
+        if (checkpoint.get("runID") != RUN_ID or type(checkpoint.get("processID")) is not int
+                or checkpoint["processID"] <= 0 or not isinstance(checkpoint.get("data"), dict)):
+            raise AssertionError("Invalid original process checkpoint")
+        parsed = Parser(version=Vrsn_2_0).parse(ims=bytearray(cesr), framed=False, processive=False)
+        if len(parsed) != 1:
+            raise AssertionError("Original Grant did not parse as one exchange")
+        nested = [hashlib.sha256(serializeParsedSubstream(node, gvrsn=Vrsn_2_0)).hexdigest()
+                  for node in parsed[0].nests]
+        if len(nested) != 3 or nested != checkpoint["data"]["state"]["nestedHashes"]:
+            raise AssertionError("Stored nested streams differ from the original Grant")
 
     result = {"valid": outcomes["valid"], "wrong": outcomes["wrong"], "missing": outcomes["missing"],
               "missingAgent": outcomes["missing-agent"], "missingProof": outcomes["missing-proof"],
@@ -228,14 +298,45 @@ try:
     report["xctest_exit_code"] = exit_code
     if exit_code:
         raise RuntimeError(f"XCTest exited with code {exit_code}")
-    result_summary = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary",
-                                     "--path", str(ROOT / "result.xcresult"), "--compact"],
-                                    capture_output=True, text=True, check=True, timeout=30)
-    xctest = json.loads(result_summary.stdout)
-    if not xctest_passed(xctest):
-        raise AssertionError("XCTest did not report exactly one pass with zero failures or skips")
-    report["xctest"] = {key: xctest[key] for key in ("result", "totalTestCount", "passedTests",
-                                                      "failedTests", "skippedTests", "expectedFailures")}
+    report["xctest"] = check_xctest(ROOT / "result.xcresult")
+    if args.app_restart:
+        report["accepted_nested_streams_match"] = True
+        stop_original_process(checkpoint["processID"])
+        restart_start = time.monotonic()
+        target["EnvironmentVariables"]["SEDI_TEST_PHASE"] = "read"
+        target["TestingEnvironmentVariables"]["SEDI_TEST_PHASE"] = "read"
+        read_run = ROOT / "configured-read.xctestrun"
+        with read_run.open("wb") as destination:
+            plistlib.dump(configuration, destination)
+        xcode_log.close()
+        xcode_log = (ROOT / "xcodebuild-read.log").open("w")
+        test_process = subprocess.Popen(
+            ["xcodebuild", "test-without-building", "-xctestrun", str(read_run),
+             "-destination", f"platform=iOS,id={DEVICE}", "-resultBundlePath", str(ROOT / "read.xcresult"),
+             "-parallel-testing-enabled", "NO", "-only-testing:KeriWalletTests/CoreSediDeviceTests/testSyntheticCorePresentation"],
+            stdout=xcode_log, stderr=subprocess.STDOUT,
+        )
+        restored = json.loads(receive("process-recovered.json").read_text())
+        if (restored.get("recovered") is not True or restored.get("missingCredentialRejected") is not True
+                or restored.get("mismatchedBindingRejected") is not True
+                or type(restored.get("processID")) is not int
+                or restored["processID"] == checkpoint["processID"]
+                or restored.get("state") != checkpoint["data"].get("state")):
+            raise AssertionError("Original Core state did not recover in a new process")
+        if test_process.wait(timeout=120):
+            raise RuntimeError("Recovery XCTest failed")
+        report["read_xctest"] = check_xctest(ROOT / "read.xcresult")
+        report["process_recovery"] = {"write_process_id": checkpoint["processID"],
+                                      "read_process_id": restored["processID"],
+                                      "seconds": time.monotonic() - restart_start,
+                                      "missing_credential_rejected": True,
+                                      "mismatched_binding_rejected": True}
+        children["valid"].stdin.write("recheck\n")
+        children["valid"].stdin.flush()
+        code = children["valid"].wait(timeout=120)
+        output = (ROOT / "verifier-valid.log").read_text()
+        result["rechecked"] = code == 0 and "rechecked the original accepted Core Grant" in output
+        (ROOT / "native-result.json").write_text(json.dumps(result))
     drift, short_lag, *_ = _KRAM_CONFIG["kram"]["caches"]["~"]
     while (datetime.now(timezone.utc) - timestamp).total_seconds() <= (drift + short_lag) / 1000 + 1:
         time.sleep(0.1)

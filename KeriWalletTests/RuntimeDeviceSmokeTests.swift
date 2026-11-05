@@ -87,14 +87,20 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
 
     private func exercise(persistent: Bool, strictPolicy: Bool = false) async throws {
         try verifyInstalledPayload()
-        let checkpointKey = "org.kerifoundation.runtime-persistence-test-v1"
+        let selectedRun = ProcessInfo.processInfo.environment["SEDI_TEST_RUN_ID"]
+        if persistent && ProcessInfo.processInfo.environment["SEDI_MANIFEST_SHA256"] != nil {
+            guard let selectedRun, UUID(uuidString: selectedRun) != nil else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
+        }
+        let checkpointKey = "org.kerifoundation.runtime-persistence-test-v1" + (selectedRun.map { "." + $0 } ?? "")
         let checkpoint = persistent ? UserDefaults.standard.dictionary(forKey: checkpointKey) : nil
         let configuration = WKWebViewConfiguration()
         if persistent {
             guard #available(iOS 17.0, *) else {
                 throw XCTSkip("An isolated persistent WebKit store requires iOS 17")
             }
-            let identifier = try XCTUnwrap(UUID(uuidString: "AD137EF7-36C9-4DBF-8D04-FB47547C2AE6"))
+            let identifier = try XCTUnwrap(UUID(uuidString: selectedRun ?? "AD137EF7-36C9-4DBF-8D04-FB47547C2AE6"))
             configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: identifier)
             XCTAssertTrue(configuration.websiteDataStore.isPersistent)
         } else {
@@ -173,25 +179,43 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
     }
 
     private func verifyInstalledPayload() throws {
+        let candidates = [
+            "9a95757579f1f2c79c8841f7151d2d3da16eed61af0fb893852a8c626f984347":
+                "37ce9f39fda858338e68397afa5bcc626b88c72f",
+            "4b5197f8d91ecda56260e7cc7337d85586499cc3c668342e9757d7de81182629":
+                "374583defa75a6e2e0eb933e5a3cbdef192f79e4"
+        ]
+        let environment = ProcessInfo.processInfo.environment
+        let requested = environment["SEDI_MANIFEST_SHA256"]
+            ?? "9a95757579f1f2c79c8841f7151d2d3da16eed61af0fb893852a8c626f984347"
+        guard let expectedCommit = candidates[requested],
+              environment["SEDI_FORTWEB_COMMIT"].map({ $0 == expectedCommit }) ?? true else {
+            XCTFail("Unsupported runtime candidate")
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
         let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("WebPayload", isDirectory: true)
         let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard digest == "9a95757579f1f2c79c8841f7151d2d3da16eed61af0fb893852a8c626f984347" else {
-            throw XCTSkip("This smoke test requires the FortWeb 37ce9f3 runtime candidate")
+        guard digest == requested else {
+            if environment["SEDI_MANIFEST_SHA256"] == nil {
+                throw XCTSkip("This smoke test requires the selected runtime candidate")
+            }
+            XCTFail("Installed runtime manifest differs from the requested candidate")
+            throw CocoaError(.validationMissingMandatoryProperty)
         }
         let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(manifest["fortweb_commit_sha"] as? String, "37ce9f39fda858338e68397afa5bcc626b88c72f")
+        let actualCommit = try XCTUnwrap(manifest["fortweb_commit_sha"] as? String)
+        _ = try XCTUnwrap(actualCommit == expectedCommit ? actualCommit : nil, "Installed runtime commit differs")
         let files = try XCTUnwrap(manifest["files"] as? [[String: Any]])
-        XCTAssertEqual(files.count, 160)
+        _ = try XCTUnwrap(files.count == 160 ? files : nil, "Unexpected runtime file count")
         for file in files {
             let path = try XCTUnwrap(file["path"] as? String)
             let expected = try XCTUnwrap(file["sha256"] as? String)
             let contents = try Data(contentsOf: root.appendingPathComponent(path))
             let actual = SHA256.hash(data: contents).map { String(format: "%02x", $0) }.joined()
-            XCTAssertEqual(actual, expected, "Installed runtime file differs: \(path)")
+            _ = try XCTUnwrap(actual == expected ? actual : nil, "Installed runtime file differs: \(path)")
         }
     }
-
 }
 
 private extension RuntimeDeviceSmokeTests {
@@ -268,8 +292,34 @@ private extension RuntimeDeviceSmokeTests {
                 syntheticOnly: true, said: checkpoint.credentialSaid});
             const holder = await request("identifiers.export", {vaultId: checkpoint.holderId,
                 aid: checkpoint.holderAid});
-            const bound = (await request("registries.present", {vaultId: checkpoint.holderId,
-                name: "presentations", grantSaid: checkpoint.grantSaid})).presentation;
+            const vault = (await request("vaults.list")).vaults.find(item => item.id === checkpoint.holderId);
+            require(vault && checkpoint.presentation);
+            const hex = value => Array.from(new TextEncoder().encode(value),
+                byte => byte.toString(16).padStart(2, "0")).join("");
+            const records = async namespace => {
+                const name = `IDBMap/@fortweb-v2/${namespace}`;
+                require((await indexedDB.databases()).some(item => item.name === name));
+                const db = await new Promise((resolve, reject) => {
+                    const open = indexedDB.open(name);
+                    open.onupgradeneeded = () => open.transaction.abort();
+                    open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error);
+                });
+                try {
+                    return JSON.parse(await new Promise((resolve, reject) => {
+                        const query = db.transaction("entries", "readonly").objectStore("entries").get("__records__");
+                        query.onsuccess = () => resolve(query.result || "{}"); query.onerror = () => reject(query.error);
+                    }));
+                } finally { db.close(); }
+            };
+            const saved = (await records(`${vault.storageName}:fwpn.`))[hex(checkpoint.grantSaid)];
+            require(saved);
+            const storedBinding = JSON.parse(new TextDecoder().decode(Uint8Array.from(
+                saved.match(/../g), byte => parseInt(byte, 16))));
+            const bound = checkpoint.presentation;
+            require(["registryId", "sequence", "blinder", "event"]
+                .every(key => storedBinding[key] === bound[key]));
+            const registryEvents = Object.values(await records(`acdc-reg:${vault.storageName}:evts.`));
+            require(bound.tel.every(event => registryEvents.includes(hex(atob(event)))));
             require(received.credential.issuance === "verified" &&
                 received.credential.said === checkpoint.credentialSaid && holder.cesr === checkpoint.holderKel &&
                 bound.registryId === checkpoint.presentationRegistryId && bound.head === checkpoint.presentationHead &&
@@ -464,6 +514,7 @@ private extension RuntimeDeviceSmokeTests {
                 sequence: restored.sequence, registryHead: restored.head, issuerKel: issuerAfter.cesr,
                 holderKel: holderAfter.cesr, grantSaid: presentation.exchange.said,
                 grantCesr: presentation.exchange.cesr,
+                presentation: presentation.presentation,
                 presentationRegistryId: presentation.presentation.registryId,
                 presentationHead: presentation.presentation.head,
                 presentationSequence: presentation.presentation.sequence,

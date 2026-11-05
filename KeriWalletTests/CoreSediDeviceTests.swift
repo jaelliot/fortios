@@ -9,16 +9,32 @@ import XCTest
 final class CoreSediDeviceTests: XCTestCase {
     func testSyntheticCorePresentation() async throws {
         let runID = try verifyPayload()
+        let phase = ProcessInfo.processInfo.environment["SEDI_TEST_PHASE"] ?? "single"
+        guard ["single", "write", "read"].contains(phase) else {
+            XCTFail("Invalid Core test phase")
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
 
         let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
         let directory = documents.appendingPathComponent("sedi-core-qualification-\(runID)", isDirectory: true)
+        if phase == "read" {
+            let checkpoint = directory.appendingPathComponent("core-checkpoint.json")
+            let recovered = directory.appendingPathComponent("process-recovered.json")
+            guard FileManager.default.fileExists(atPath: checkpoint.path),
+                  !FileManager.default.fileExists(atPath: recovered.path) else {
+                XCTFail("Core checkpoint is missing or recovery already completed")
+                throw CocoaError(.fileReadNoSuchFile)
+            }
+            try await recoverCore(in: directory, runID: runID)
+            return
+        }
         guard !FileManager.default.fileExists(atPath: directory.path) else {
             XCTFail("Test directory already exists")
             throw CocoaError(.fileWriteFileExists)
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
 
-        try await exerciseCore(in: directory)
+        try await exerciseCore(in: directory, runID: runID, persistent: phase == "write")
     }
 
     private func verifyPayload() throws -> String {
@@ -48,7 +64,10 @@ final class CoreSediDeviceTests: XCTestCase {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
         let files = try XCTUnwrap(manifest["files"] as? [[String: Any]])
-        XCTAssertFalse(files.isEmpty)
+        guard files.count == 160 else {
+            XCTFail("Unexpected payload file count")
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
         for item in files {
             let path = try XCTUnwrap(item["path"] as? String)
             let expected = try XCTUnwrap(item["sha256"] as? String)
@@ -62,23 +81,12 @@ final class CoreSediDeviceTests: XCTestCase {
         return runID
     }
 
-    private func exerciseCore(in directory: URL) async throws {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        let policy = "default-src 'none'; script-src app: 'wasm-unsafe-eval'; " +
-            "worker-src app: blob:; connect-src app: https:; img-src app: blob: data:; style-src app: 'unsafe-inline'"
-        let handler = RuntimeSmokeSchemeHandler(policy: policy)
-        configuration.setURLSchemeHandler(handler, forURLScheme: "app")
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        let loaded = expectation(description: "Core SEDI test document loads")
-        let navigation = RuntimeSmokeNavigation(loaded: loaded)
-        webView.navigationDelegate = navigation
-        webView.load(URLRequest(url: try XCTUnwrap(URL(string: "app://local/runtime-smoke.html"))))
-        await fulfillment(of: [loaded], timeout: 30)
+    private func exerciseCore(in directory: URL, runID: String, persistent: Bool) async throws {
+        let (webView, handler, navigation) = try await coreWebView(runID: runID, persistent: persistent)
 
         print("Core test stage: setup")
         let setupResult = try await webView.callAsyncJavaScript(
-            Self.setup, arguments: [:], in: nil, contentWorld: .page
+            Self.bridgeSetup + "\n" + Self.setup, arguments: [:], in: nil, contentWorld: .page
         )
         let setup = try XCTUnwrap(setupResult as? String)
         try Data(setup.utf8).write(to: directory.appendingPathComponent("holder.json"), options: .atomic)
@@ -100,19 +108,47 @@ final class CoreSediDeviceTests: XCTestCase {
             return
         }
         let ready = try XCTUnwrap(readyResult as? String)
-        let readyData = try XCTUnwrap(ready.data(using: .utf8))
+        let readyData = Data(ready.utf8)
         let readyObject = try XCTUnwrap(JSONSerialization.jsonObject(with: readyData) as? [String: Any])
         if let stage = readyObject["failureStage"] as? String {
             XCTFail("Core prepare failed at \(stage): \(readyObject["message"] ?? "unknown")")
             return
         }
-        try Data(ready.utf8).write(to: directory.appendingPathComponent("ready.json"), options: .atomic)
+        try readyData.write(to: directory.appendingPathComponent("ready.json"), options: .atomic)
         try await waitForFile(directory.appendingPathComponent("go.json"))
-        try await presentAndRecover(in: directory, webView: webView)
+        try await presentAndRecover(in: directory, webView: webView, runID: runID, persistent: persistent)
         withExtendedLifetime((handler, navigation)) {}
     }
 
-    private func presentAndRecover(in directory: URL, webView: WKWebView) async throws {
+    private func coreWebView(runID: String, persistent: Bool) async throws
+        -> (WKWebView, RuntimeSmokeSchemeHandler, RuntimeSmokeNavigation) {
+        let configuration = WKWebViewConfiguration()
+        if persistent {
+            guard #available(iOS 17.0, *), let identifier = UUID(uuidString: runID) else {
+                throw CocoaError(.featureUnsupported)
+            }
+            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: identifier)
+            guard configuration.websiteDataStore.isPersistent else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
+        } else {
+            configuration.websiteDataStore = .nonPersistent()
+        }
+        let policy = "default-src 'none'; script-src app: 'wasm-unsafe-eval'; " +
+            "worker-src app: blob:; connect-src app: https:; img-src app: blob: data:; style-src app: 'unsafe-inline'"
+        let handler = RuntimeSmokeSchemeHandler(policy: policy)
+        configuration.setURLSchemeHandler(handler, forURLScheme: "app")
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let loaded = expectation(description: "Core SEDI test document loads")
+        let navigation = RuntimeSmokeNavigation(loaded: loaded)
+        webView.navigationDelegate = navigation
+        webView.load(URLRequest(url: try XCTUnwrap(URL(string: "app://local/runtime-smoke.html"))))
+        await fulfillment(of: [loaded], timeout: 30)
+        return (webView, handler, navigation)
+    }
+
+    private func presentAndRecover(in directory: URL, webView: WKWebView, runID: String,
+                                   persistent: Bool) async throws {
         print("Core test stage: present")
         let grantResult = try await webView.callAsyncJavaScript(
             Self.present, arguments: [:], in: nil, contentWorld: .page
@@ -134,10 +170,24 @@ final class CoreSediDeviceTests: XCTestCase {
 
         print("Core test stage: recover")
         let recoveredResult = try await webView.callAsyncJavaScript(
-            Self.recover, arguments: [:], in: nil, contentWorld: .page
+            Self.coreHelpers + "\n" + Self.recover, arguments: [:], in: nil, contentWorld: .page
         )
         let recovered = try XCTUnwrap(recoveredResult as? String)
-        try Data(recovered.utf8).write(to: directory.appendingPathComponent("recovered.json"), options: .atomic)
+        let recoveredData = Data(recovered.utf8)
+        let recoveredObject = try XCTUnwrap(JSONSerialization.jsonObject(with: recoveredData) as? [String: Any])
+        let checkpoint = try XCTUnwrap(recoveredObject["checkpoint"] as? [String: Any])
+        if persistent {
+            let wrapper: [String: Any] = ["runID": runID, "processID": ProcessInfo.processInfo.processIdentifier,
+                                           "data": checkpoint]
+            try JSONSerialization.data(withJSONObject: wrapper).write(
+                to: directory.appendingPathComponent("core-checkpoint.json"), options: .atomic
+            )
+        }
+        let summary: [String: Bool] = ["credentialRecovered": true, "bindingRecovered": true,
+                                       "grantMetadataRecovered": true]
+        try JSONSerialization.data(withJSONObject: summary).write(
+            to: directory.appendingPathComponent("recovered.json"), options: .atomic
+        )
         let resultFile = directory.appendingPathComponent("native-result.json")
         let resultValue = try await waitForJSON(resultFile)
         let result = try XCTUnwrap(resultValue as? [String: Bool])
@@ -146,7 +196,36 @@ final class CoreSediDeviceTests: XCTestCase {
         XCTAssertEqual(result["missing"], true)
         XCTAssertEqual(result["missingAgent"], true)
         XCTAssertEqual(result["missingProof"], true)
-        XCTAssertEqual(result["rechecked"], true)
+        if !persistent { XCTAssertEqual(result["rechecked"], true) }
+    }
+
+    private func recoverCore(in directory: URL, runID: String) async throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("core-checkpoint.json"))
+        let wrapper = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        guard wrapper["runID"] as? String == runID,
+              let oldPID = wrapper["processID"] as? Int,
+              oldPID != Int(ProcessInfo.processInfo.processIdentifier),
+              let checkpoint = wrapper["data"] as? [String: Any] else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        let (webView, handler, navigation) = try await coreWebView(runID: runID, persistent: true)
+        let result = try await webView.callAsyncJavaScript(
+            Self.bridgeSetup + "\n" + Self.coreHelpers + "\n" + Self.resume,
+            arguments: ["checkpoint": checkpoint], in: nil, contentWorld: .page
+        )
+        let recovered = try XCTUnwrap(result as? String)
+        let value = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(recovered.utf8)) as? [String: Any])
+        guard value["recovered"] as? Bool == true,
+              value["missingCredentialRejected"] as? Bool == true,
+              value["mismatchedBindingRejected"] as? Bool == true else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        var output = value
+        output["processID"] = ProcessInfo.processInfo.processIdentifier
+        try JSONSerialization.data(withJSONObject: output).write(
+            to: directory.appendingPathComponent("process-recovered.json"), options: .atomic
+        )
+        withExtendedLifetime((handler, navigation)) {}
     }
 
     private func waitForJSON(_ url: URL) async throws -> Any {
@@ -168,7 +247,10 @@ final class CoreSediDeviceTests: XCTestCase {
         throw CocoaError(.fileReadNoSuchFile)
     }
 
-    private static let setup = #"""
+}
+
+private extension CoreSediDeviceTests {
+    static let bridgeSetup = #"""
     const originalFetch = globalThis.fetch.bind(globalThis);
     globalThis.fetch = async (...args) => {
         const response = await originalFetch(...args);
@@ -192,9 +274,13 @@ final class CoreSediDeviceTests: XCTestCase {
         configUrl:new URL(origin.configUrl), runtimeOriginContract:origin});
     ctx.bridge = ctx.newBridge();
     ctx.request = (method, params = {}) => ctx.bridge.request(method, params, 180000);
+    """#
+
+    private static let setup = #"""
     const vault = await ctx.request("vaults.create", {
         name:"synthetic-core-holder", passcode:"synthetic-holder-passcode"});
     ctx.vaultId = vault.vault.id;
+    ctx.storageName = vault.vault.storageName;
     await ctx.request("vaults.open", {vaultId:ctx.vaultId, passcode:"synthetic-holder-passcode"});
     ctx.holderAid = (await ctx.request("identifiers.create", {vaultId:ctx.vaultId, alias:"holder"})).identifier.aid;
     ctx.registry = (await ctx.request("registries.create", {
@@ -268,29 +354,130 @@ final class CoreSediDeviceTests: XCTestCase {
     return JSON.stringify(ctx.result);
     """#
 
+    private static let coreHelpers = #"""
+    const hex = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, "0")).join("");
+    const bytes = text => Uint8Array.from(text.match(/../g) ?? [], b => parseInt(b, 16));
+    const hash = async value => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", value)),
+        b => b.toString(16).padStart(2, "0")).join("");
+    const canonical = value => value && typeof value === "object"
+        ? Array.isArray(value) ? value.map(canonical) : Object.fromEntries(
+            Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+    const digest = value => hash(new TextEncoder().encode(JSON.stringify(canonical(value))));
+    const records = async namespace => {
+        const name = `IDBMap/@fortweb-v2/${namespace}`;
+        if (!(await indexedDB.databases()).some(entry => entry.name === name))
+            throw new Error("Expected synthetic storage is absent");
+        const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open(name);
+            request.onupgradeneeded = () => request.transaction.abort();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        try {
+            const raw = await new Promise((resolve, reject) => {
+                const request = db.transaction("entries", "readonly").objectStore("entries").get("__records__");
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            return JSON.parse(raw || "{}");
+        } finally { db.close(); }
+    };
+    const snapshot = async (ctx, expected) => {
+        if (!Array.isArray(expected.nodeSaids) || expected.nodeSaids.length !== 3 ||
+            !Array.isArray(expected.telHashes) || !Number.isInteger(expected.bindingSequence) ||
+            expected.bindingSequence < 0 || expected.telHashes.length <= expected.bindingSequence)
+            throw new Error("Incomplete checkpoint");
+        const request = ctx.request, vaultId = ctx.vaultId;
+        const identifier = (await request("identifiers.get", {vaultId, aid:expected.holderAid})).identifier;
+        const kel = (await request("identifiers.export", {vaultId, aid:expected.holderAid})).cesr;
+        const credential = await request("credentials.getReceived", {vaultId, syntheticOnly:true,
+            said:expected.credentialSaid});
+        if (credential.credential.issuance !== "verified") throw new Error("Core credential is not verified");
+        const registry = (await request("registries.get", {vaultId, name:"presentations"})).registry;
+        const exchange = (await request("ipex.get", {vaultId, syntheticOnly:true, said:expected.grantSaid})).exchange;
+        if (registry.registryId !== expected.registryId || exchange.said !== expected.grantSaid)
+            throw new Error("Original registry or Grant differs");
+        const binding = (await records(`${ctx.storageName}:fwpn.`))[hex(expected.grantSaid)];
+        if (!binding || await digest(JSON.parse(new TextDecoder().decode(bytes(binding)))) !== expected.bindingHash)
+            throw new Error("Original presentation binding differs");
+        const events = await records(`acdc-reg:${ctx.storageName}:evts.`);
+        const eventHashes = await Promise.all(Object.values(events).map(value => hash(bytes(value))));
+        if (expected.telHashes.some(value => !eventHashes.includes(value))) throw new Error("Original TEL is missing");
+        const nested = await records(`${ctx.storageName}:enst.`), prefix = hex(expected.grantSaid + ".");
+        const streams = Object.keys(nested).filter(key => key.startsWith(prefix)).sort().map(key => bytes(nested[key]));
+        if (streams.length !== 3 || expected.nodeSaids.some(said =>
+            !streams.some(stream => new TextDecoder().decode(stream).includes(said))))
+            throw new Error("Original authority streams are missing");
+        const signed = {};
+        for (const name of ["kels.", "evts.", "sigs.", "fwpn.", "fwrc."]) {
+            const values = await records(`${ctx.storageName}:${name}`);
+            if (name === "fwrc." && Object.hasOwn(values, hex("_pending"))) throw new Error("Pending operation");
+            signed[name] = await digest(values);
+        }
+        for (const name of ["regs.", "tels.", "evts.", "ancs.", "heds."]) {
+            const values = await records(`acdc-reg:${ctx.storageName}:${name}`);
+            if (name === "regs." && Object.hasOwn(values, hex("_fortweb_pending")))
+                throw new Error("Pending operation");
+            signed[`registry:${name}`] = await digest(values);
+        }
+        return {holderAid:identifier.aid, holderSequence:identifier.sequenceNumber,
+            holderHead:identifier.lastEventDigest,
+            holderKelHash:await hash(Uint8Array.from(atob(kel), c => c.charCodeAt(0))),
+            credentialSaid:credential.credential.said, evidenceHash:await digest(credential.evidence),
+            registryId:registry.registryId, grant:exchange, nestedHashes:await Promise.all(streams.map(hash)), signed};
+    };
+    """#
+
     private static let recover = #"""
     const ctx = globalThis.__coreSediTest;
     await ctx.request("vaults.close", {vaultId:ctx.vaultId});
     ctx.bridge.destroy();
     ctx.bridge = ctx.newBridge();
     await ctx.request("vaults.open", {vaultId:ctx.vaultId, passcode:"synthetic-holder-passcode"});
-    const received = await ctx.request("credentials.getReceived", {
-        vaultId:ctx.vaultId, syntheticOnly:true, said:ctx.fixture.evidence.said});
-    const canonical = value => value && typeof value === "object"
-        ? Array.isArray(value) ? value.map(canonical) : Object.fromEntries(
-            Object.keys(value).sort().map(key => [key, canonical(value[key])]))
-        : value;
-    if (JSON.stringify(canonical(received.evidence)) !== JSON.stringify(canonical(ctx.fixture.evidence)))
-        throw new Error("Core credential evidence changed on worker restart");
-    const binding = await ctx.request("registries.present", {
-        vaultId:ctx.vaultId, name:"presentations", grantSaid:ctx.result.exchange.said});
-    if (JSON.stringify(canonical(binding.presentation)) !== JSON.stringify(canonical(ctx.result.presentation)))
-        throw new Error("Presentation binding changed on worker restart");
-    const exchange = await ctx.request("ipex.get", {
-        vaultId:ctx.vaultId, syntheticOnly:true, said:ctx.result.exchange.said});
-    if (exchange.exchange.said !== ctx.result.exchange.said) throw new Error("Grant metadata changed");
-    await ctx.request("vaults.close", {vaultId:ctx.vaultId});
-    ctx.bridge.destroy();
-    return JSON.stringify({credentialRecovered:true, bindingRecovered:true, grantMetadataRecovered:true});
+    try {
+        const p = ctx.result.presentation;
+        const expected = {vaultId:ctx.vaultId, storageName:ctx.storageName, holderAid:ctx.holderAid,
+            credentialSaid:ctx.fixture.evidence.said, registryId:ctx.registry.registryId,
+            grantSaid:ctx.result.exchange.said,
+            nodeSaids:[ctx.fixture.evidence.said, ...ctx.fixture.supporting.map(item => item.said)],
+            bindingSequence:p.sequence,
+            telHashes:await Promise.all(p.tel.map(t => hash(Uint8Array.from(atob(t), c => c.charCodeAt(0))))),
+            bindingHash:await digest({registryId:p.registryId, sequence:p.sequence, blinder:p.blinder, event:p.event})};
+        const state = await snapshot(ctx, expected);
+        const fixtureHash = await digest(ctx.fixture.evidence);
+        if (state.evidenceHash !== fixtureHash) throw new Error("Original credential evidence differs");
+        return JSON.stringify({checkpoint:{expected, state}});
+    } finally {
+        await ctx.request("vaults.close", {vaultId:ctx.vaultId});
+        ctx.bridge.destroy();
+    }
+    """#
+
+    private static let resume = #"""
+    const expected = checkpoint.expected;
+    ctx.vaultId = expected.vaultId;
+    ctx.storageName = expected.storageName;
+    const vaults = (await ctx.request("vaults.list")).vaults;
+    if (!vaults.some(v => v.id === ctx.vaultId && v.storageName === ctx.storageName))
+        throw new Error("Original synthetic vault is missing");
+    await ctx.request("vaults.open", {vaultId:ctx.vaultId, passcode:"synthetic-holder-passcode"});
+    try {
+        const state = await snapshot(ctx, expected);
+        if (JSON.stringify(canonical(state)) !== JSON.stringify(canonical(checkpoint.state)))
+            throw new Error("Recovered Core state differs from checkpoint");
+        let missingCredentialRejected = false;
+        try { await ctx.request("credentials.getReceived", {vaultId:ctx.vaultId, syntheticOnly:true,
+            said:expected.nodeSaids[1]}); } catch (error) { missingCredentialRejected = error?.code === "NOT_FOUND"; }
+        let mismatchedBindingRejected = false;
+        try { await snapshot(ctx, {...expected, bindingHash:"0".repeat(64)}); }
+        catch (error) { mismatchedBindingRejected = String(error?.message).includes("binding differs"); }
+        if (!missingCredentialRejected || !mismatchedBindingRejected ||
+            JSON.stringify(canonical(await snapshot(ctx, expected))) !== JSON.stringify(canonical(state)))
+            throw new Error("Recovery negative checks failed or changed state");
+        return JSON.stringify({recovered:true, missingCredentialRejected, mismatchedBindingRejected, state});
+    } finally {
+        await ctx.request("vaults.close", {vaultId:ctx.vaultId});
+        ctx.bridge.destroy();
+    }
     """#
 }
