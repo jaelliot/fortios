@@ -231,9 +231,11 @@ try:
     result_summary = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary",
                                      "--path", str(ROOT / "result.xcresult"), "--compact"],
                                     capture_output=True, text=True, check=True, timeout=30)
-    report["xctest"] = json.loads(result_summary.stdout)
-    if not xctest_passed(report["xctest"]):
+    xctest = json.loads(result_summary.stdout)
+    if not xctest_passed(xctest):
         raise AssertionError("XCTest did not report exactly one pass with zero failures or skips")
+    report["xctest"] = {key: xctest[key] for key in ("result", "totalTestCount", "passedTests",
+                                                      "failedTests", "skippedTests", "expectedFailures")}
     drift, short_lag, *_ = _KRAM_CONFIG["kram"]["caches"]["~"]
     while (datetime.now(timezone.utc) - timestamp).total_seconds() <= (drift + short_lag) / 1000 + 1:
         time.sleep(0.1)
