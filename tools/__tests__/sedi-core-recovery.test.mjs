@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import test from 'node:test';
+import { test } from 'vitest';
 
 const source = readFileSync(new URL('../../KeriWalletTests/CoreSediDeviceTests.swift', import.meta.url), 'utf8');
 const helper = source.match(/private static let coreHelpers = #"""\n([\s\S]*?)\n    """#/);
@@ -65,20 +65,18 @@ test('recovery reads matching signed state without modifying the stores', async 
     assert.equal(JSON.stringify(f.dbs), before);
 });
 
-test('recovery rejects missing or changed binding, TEL, nested stream, and pending state', async t => {
-    for (const [label, mutate] of [
-        ['binding', f => { delete f.dbs[f.name('wallet:fwpn.')][hex('grant')]; }],
-        ['changed binding', f => { f.dbs[f.name('wallet:fwpn.')][hex('grant')] = hex('{}'); }],
-        ['TEL', f => { f.dbs[f.name('acdc-reg:wallet:evts.')] = {}; }],
-        ['nested stream', f => { delete f.dbs[f.name('wallet:enst.')][hex('grant.2')]; }],
-        ['credential', f => { const request = f.ctx.request; f.ctx.request = async (...args) => {
-            if (args[0] === 'credentials.getReceived') throw Error('missing'); return request(...args);
-        }; }],
-        ['pending receipt', f => { f.dbs[f.name('wallet:fwrc.')][hex('_pending')] = hex('yes'); }],
-        ['pending registry', f => { f.dbs[f.name('acdc-reg:wallet:regs.')][hex('_fortweb_pending')] = hex('yes'); }],
-        ['incomplete checkpoint', f => { f.expected.bindingSequence = 1; }],
-    ]) await t.test(label, async () => {
-        const f = fixture(); mutate(f);
-        await assert.rejects(run(f.ctx, f.expected, f.indexedDB, webcrypto));
-    });
+test.each([
+    ['binding', f => { delete f.dbs[f.name('wallet:fwpn.')][hex('grant')]; }],
+    ['changed binding', f => { f.dbs[f.name('wallet:fwpn.')][hex('grant')] = hex('{}'); }],
+    ['TEL', f => { f.dbs[f.name('acdc-reg:wallet:evts.')] = {}; }],
+    ['nested stream', f => { delete f.dbs[f.name('wallet:enst.')][hex('grant.2')]; }],
+    ['credential', f => { const request = f.ctx.request; f.ctx.request = async (...args) => {
+        if (args[0] === 'credentials.getReceived') throw Error('missing'); return request(...args);
+    }; }],
+    ['pending receipt', f => { f.dbs[f.name('wallet:fwrc.')][hex('_pending')] = hex('yes'); }],
+    ['pending registry', f => { f.dbs[f.name('acdc-reg:wallet:regs.')][hex('_fortweb_pending')] = hex('yes'); }],
+    ['incomplete checkpoint', f => { f.expected.bindingSequence = 1; }],
+])('recovery rejects invalid %s', async (_label, mutate) => {
+    const f = fixture(); mutate(f);
+    await assert.rejects(run(f.ctx, f.expected, f.indexedDB, webcrypto));
 });
