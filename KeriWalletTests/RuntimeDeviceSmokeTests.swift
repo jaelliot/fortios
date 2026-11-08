@@ -73,6 +73,12 @@ final class RuntimeSmokeNavigation: NSObject, WKNavigationDelegate {
 
 @MainActor
 final class RuntimeDeviceSmokeTests: XCTestCase {
+    private let strictPolicyManifest = "665722ddca6a8a367086e439b64f4c15f888df7e36287954f19948a3ba7e6644"
+    private let strictPolicyManifests: Set<String> = [
+        "4b5197f8d91ecda56260e7cc7337d85586499cc3c668342e9757d7de81182629",
+        "665722ddca6a8a367086e439b64f4c15f888df7e36287954f19948a3ba7e6644"
+    ]
+
     func testSyntheticNativePresentation() async throws {
         try await exercise(persistent: false)
     }
@@ -81,12 +87,12 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         try await exercise(persistent: true)
     }
 
-    func testStrictRuntimePolicyReportsPyScriptEvaluationBlock() async throws {
+    func testStrictRuntimePolicyMatchesSelectedCandidate() async throws {
         try await exercise(persistent: false, strictPolicy: true)
     }
 
     private func exercise(persistent: Bool, strictPolicy: Bool = false) async throws {
-        try verifyInstalledPayload()
+        let selectedManifest = try verifyInstalledPayload()
         let selectedRun = ProcessInfo.processInfo.environment["SEDI_TEST_RUN_ID"]
         if persistent && ProcessInfo.processInfo.environment["SEDI_MANIFEST_SHA256"] != nil {
             guard let selectedRun, UUID(uuidString: selectedRun) != nil else {
@@ -121,7 +127,7 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
             in: nil, contentWorld: .page
         )
         let outcome = try XCTUnwrap(result as? [String: Any])
-        if strictPolicy {
+        if strictPolicy && !strictPolicyManifests.contains(selectedManifest) {
             XCTAssertEqual(outcome["ok"] as? Bool, false)
             XCTAssertEqual(outcome["stage"] as? String, "issuer")
             XCTAssertEqual(outcome["failureClass"] as? String, "csp-eval")
@@ -191,12 +197,13 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
         print("Runtime persistence phase: \(phase), process: \(ProcessInfo.processInfo.processIdentifier)")
     }
 
-    private func verifyInstalledPayload() throws {
+    private func verifyInstalledPayload() throws -> String {
         let candidates = [
             "9a95757579f1f2c79c8841f7151d2d3da16eed61af0fb893852a8c626f984347":
                 "37ce9f39fda858338e68397afa5bcc626b88c72f",
             "4b5197f8d91ecda56260e7cc7337d85586499cc3c668342e9757d7de81182629":
-                "374583defa75a6e2e0eb933e5a3cbdef192f79e4"
+                "374583defa75a6e2e0eb933e5a3cbdef192f79e4",
+            strictPolicyManifest: "a88507b38b6cf15a938b80ce4833f93642b9c7aa"
         ]
         let environment = ProcessInfo.processInfo.environment
         let requested = environment["SEDI_MANIFEST_SHA256"]
@@ -228,5 +235,6 @@ final class RuntimeDeviceSmokeTests: XCTestCase {
             let actual = SHA256.hash(data: contents).map { String(format: "%02x", $0) }.joined()
             _ = try XCTUnwrap(actual == expected ? actual : nil, "Installed runtime file differs: \(path)")
         }
+        return requested
     }
 }

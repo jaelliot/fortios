@@ -314,12 +314,11 @@ compatibility validator because this host configuration does not establish
 HTTPS wallet-service support and does not declare v2 compatibility. Passing
 this device test does not resolve that separate compatibility failure.
 
-`testStrictRuntimePolicyReportsPyScriptEvaluationBlock` characterizes the
-pinned candidate under a policy that permits WebAssembly but blocks JavaScript
-string evaluation. It expects the current PyScript worker setup to fail at
-that boundary. A passing test records the incompatibility; it does not mean
-the host satisfies runtime requirements v2. The test skips when the installed
-payload does not match the pinned candidate.
+`testStrictRuntimePolicyMatchesSelectedCandidate` checks a policy that permits
+WebAssembly but blocks JavaScript string evaluation. It expects the older
+pre-CSP candidate to report the PyScript evaluation incompatibility and the
+strict-policy candidates to complete the synthetic presentation. A passing test
+does not establish runtime requirements v2 compatibility or production readiness.
 
 ### Node tooling tests
 
