@@ -113,11 +113,11 @@ final class KeriWalletUITests: XCTestCase {
         let nameField = webView.textFields["Name"]
         let createPasscode = webView.secureTextFields["Passcode"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 10), "Vault name field did not appear")
-        nameField.tap()
-        nameField.typeText(name)
+        typeText(name, into: nameField)
+        XCTAssertEqual(nameField.value as? String, name)
         XCTAssertTrue(createPasscode.waitForExistence(timeout: 10), "Vault passcode field did not appear")
-        createPasscode.tap()
-        createPasscode.typeText(passcode)
+        typeText(passcode, into: createPasscode)
+        XCTAssertEqual(nameField.value as? String, name)
         webView.buttons["Create"].tap()
 
         let openButton = webView.buttons["Open"]
@@ -137,8 +137,7 @@ final class KeriWalletUITests: XCTestCase {
 
         let unlockPasscode = webView.secureTextFields.firstMatch
         XCTAssertTrue(unlockPasscode.waitForExistence(timeout: 10))
-        unlockPasscode.tap()
-        unlockPasscode.typeText(passcode)
+        typeText(passcode, into: unlockPasscode)
         openButton.tap()
 
         let lockButton = webView.buttons["Lock vault"]
@@ -158,5 +157,16 @@ final class KeriWalletUITests: XCTestCase {
         XCTAssertTrue(
             webView.secureTextFields.firstMatch.waitForExistence(timeout: 30), "Lock did not return to unlock"
         )
+    }
+
+    private func typeText(_ value: String, into field: XCUIElement) {
+        for _ in 0..<3 {
+            field.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 5) {
+                app.typeText(value)
+                return
+            }
+        }
+        XCTFail("Keyboard did not appear for \(field.label)")
     }
 }
