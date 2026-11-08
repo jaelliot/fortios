@@ -99,7 +99,7 @@ final class KeriWalletUITests: XCTestCase {
 
     // MARK: - Vault Flow
 
-    func test_vault_create_open_navigation_and_lock() {
+    func test_vault_restart_open_navigation_and_lock() {
         let webView = app.webViews.firstMatch
         XCTAssertTrue(webView.waitForExistence(timeout: 30), "WKWebView did not appear")
 
@@ -122,8 +122,12 @@ final class KeriWalletUITests: XCTestCase {
 
         let openButton = webView.buttons["Open"]
         XCTAssertTrue(openButton.waitForExistence(timeout: 90), "Created vault did not reach the unlock screen")
-        XCTAssertTrue(webView.links["Cancel"].exists)
         webView.links["Cancel"].tap()
+
+        app.terminate()
+        XCTAssertEqual(app.state, .notRunning)
+        app.launch()
+        XCTAssertTrue(webView.waitForExistence(timeout: 30), "WKWebView did not reappear after relaunch")
 
         let vaultDrawer = openVaultDrawer(webView: webView, toggleTimeout: 60)
         let vault = vaultDrawer.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
