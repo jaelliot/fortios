@@ -117,8 +117,10 @@ jobs:
       - name: Install pytest
         run: python3 -m pip install --disable-pip-version-check pytest==9.0.2
 
-      - name: Run simulator resolver tests (pytest)
-        run: make test-resolver
+      - name: Run simulator resolver and SEDI result tests (pytest)
+        run: |
+          make test-resolver
+          python3 -m pytest tools/__tests__/test_sedi_core_test_validation.py -q
 
       - name: Build canonical FortWeb runtime
         run: |
