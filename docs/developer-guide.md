@@ -179,6 +179,147 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
+#### Synthetic native IPEX smoke test
+
+`RuntimeDeviceSmokeTests/testSyntheticNativePresentation` exercises the FortWeb
+`37ce9f3` candidate in a separate, nonpersistent WKWebView data store. The test
+checks the installed manifest and all 160 declared file hashes, issues and
+retrieves a registry-backed synthetic credential, and verifies a presentation in
+a separate verifier vault. It also checks wrong-party and wrong-Grant rejection,
+tamper recovery, writer contention, and retrieval after worker restart.
+
+The test uses the producer's synthetic schema fixture and enables the runtime's
+synthetic-recipient flag only in the test webview. It does not modify the bundled
+configuration. Its in-memory vaults are discarded after the test: they do not
+prove credential persistence across an app restart, network delivery, or external
+SEDI interoperability. The test skips when the installed manifest is not the
+candidate it is pinned to; a skipped test is not a successful candidate check.
+
+From a clean checkout, obtain the verified FortWeb runtime ZIP and import it with
+the canonical importer. The candidate ZIP SHA-256 is
+`6b71231a492906fbbb05e9736a73d7ab393b920a1a5312b4bfe46f579e3a79c5`.
+
+```sh
+shasum -a 256 "$FORTWEB_RUNTIME_ZIP"
+node tools/import-fortweb-runtime-package.mjs "$FORTWEB_RUNTIME_ZIP"
+node tools/assert-payload-integrity.mjs --payload-dir WebPayload
+```
+
+For a physical device, use an existing separately signed development installation
+and review its data before updating it. The following example targets the `.dev`
+app and leaves the project test bundle IDs distinct. Replace the destination ID
+with the paired device and use an unused result path.
+
+```sh
+xcodebuild test \
+  -project KeriWallet.xcodeproj -scheme KeriWallet -configuration Debug \
+  -destination 'platform=iOS,id=DEVICE_UDID' \
+  -derivedDataPath build/DerivedData-runtime-smoke \
+  -resultBundlePath build/RuntimeSmokeDevice.xcresult \
+  -parallel-testing-enabled NO \
+  -only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePresentation \
+  'PRODUCT_BUNDLE_IDENTIFIER=com.kerifoundation.wallet$(FORT_TEST_ID_$(TARGET_NAME))' \
+  FORT_TEST_ID_KeriWallet=.dev FORT_TEST_ID_KeriWalletTests=.tests \
+  FORT_TEST_ID_KeriWalletUITests=.uitests
+```
+
+Inspect the Xcode result bundle and confirm one test passed and none were skipped.
+The existing app's normal persistent vault remains separate from the test store;
+confirm its vault and identifier after updating the development app. The test
+does not delete its host app or require changing certificates or account settings.
+
+#### Synthetic credential recovery across an app restart
+
+`testSyntheticNativePersistenceAcrossAppRestart` uses the same candidate and
+protocol operations in a persistent, identifier-specific WKWebView data store.
+It is isolated from the app's default WebKit store and requires iOS 17 or later.
+The test uses synthetic vaults and a synthetic Grant; it stores the Grant stream
+and comparison metadata in a test-only app-preferences checkpoint. The actual
+credential and registry evidence are reopened from the protected test vaults.
+No real credential or passcode should be used with this test.
+
+Use the same preflight and development bundle settings above, replacing the test
+selection and adding Xcode's process-relaunch options:
+
+```sh
+-only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePersistenceAcrossAppRestart
+-test-iterations 2 -test-repetition-relaunch-enabled YES
+```
+
+Use a new result path and keep the app installed throughout both iterations.
+The result is valid only when both iterations pass without skips and the test
+output shows `Runtime persistence phase: write` followed by `read` with different
+process IDs. Two write phases or an incomplete run do not prove recovery. If an
+interrupted run leaves a pending checkpoint, the next iteration reads that state;
+start another two-iteration run and confirm the write/read order. Synthetic test
+vaults and checkpoints are not automatically removed.
+
+On recovery the test compares the original identifiers, issuer and presentation
+registry heads, credential and Grant IDs, retrieves the previously stored Grant,
+and re-verifies it using recovered issuer and holder evidence. It also rejects a
+changed Grant binding. The Grant stream used for re-verification comes from the
+test checkpoint, because the current exchange lookup returns a verified view, not
+an exportable original stream. It does not demonstrate network delivery, current
+revocation status, or the user-facing Credentials workflow.
+
+For an offline cold-launch recovery without reinstalling, start with a trusted,
+already installed `.dev` build containing `KeriWalletTests.xctest` and the
+generated device `.xctestrun` file for that same build. Set `XCTESTRUN` to the
+generated file and `NO_INSTALL_XCTESTRUN` to a new local file. The following
+retains the generated testing environment but tells Xcode to use the installed
+test bundle. It refuses a test host other than the development app.
+
+```sh
+python3 - "$XCTESTRUN" "$NO_INSTALL_XCTESTRUN" <<'PY'
+import plistlib
+import sys
+
+with open(sys.argv[1], 'rb') as source:
+    run = plistlib.load(source)
+found = False
+for configuration in run['TestConfigurations']:
+    targets = [t for t in configuration['TestTargets'] if t['BlueprintName'] == 'KeriWalletTests']
+    for target in targets:
+        if target['TestHostBundleIdentifier'] != 'com.kerifoundation.wallet.dev':
+            raise SystemExit('Expected the existing development app')
+        for key in ('TestBundlePath', 'TestHostPath', 'UITargetAppPath', 'DependentProductPaths'):
+            target.pop(key, None)
+        target['UseDestinationArtifacts'] = True
+        target['TestBundleDestinationRelativePath'] = '__TESTHOST__/PlugIns/KeriWalletTests.xctest'
+        found = True
+    configuration['TestTargets'] = targets
+if not found:
+    raise SystemExit('KeriWalletTests target not found')
+with open(sys.argv[2], 'wb') as destination:
+    plistlib.dump(run, destination)
+PY
+```
+
+While online, run the following command with a paired device ID and an unused
+result path. Confirm the output says `Runtime persistence phase: write`. If it
+says `read`, repeat online until a new write completes. Then close the app, verify
+its process has stopped, disable both Wi-Fi and cellular, and run the same command
+with a different result path. Confirm the offline run says `read`, passes without
+skips, and uses a different process ID. Restore connectivity afterward.
+
+```sh
+xcodebuild test-without-building -xctestrun "$NO_INSTALL_XCTESTRUN" \
+  -destination 'platform=iOS,id=DEVICE_UDID' -resultBundlePath RESULT_PATH \
+  -parallel-testing-enabled NO \
+  -only-testing:KeriWalletTests/RuntimeDeviceSmokeTests/testSyntheticNativePersistenceAcrossAppRestart
+```
+
+The candidate's `fort.runtime-requirements.v2` descriptor is rejected by the
+compatibility validator because this host configuration does not establish
+HTTPS wallet-service support and does not declare v2 compatibility. Passing
+this device test does not resolve that separate compatibility failure.
+
+`testStrictRuntimePolicyMatchesSelectedCandidate` checks a policy that permits
+WebAssembly but blocks JavaScript string evaluation. It expects the older
+pre-CSP candidate to report the PyScript evaluation incompatibility and the
+strict-policy candidates to complete the synthetic presentation. A passing test
+does not establish runtime requirements v2 compatibility or production readiness.
+
 ### Node tooling tests
 
 `make test-tools` runs the payload import, validation, and bridge tooling tests
